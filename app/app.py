@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.01'
+APP_VERSION = '0.6.02'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -8736,11 +8736,12 @@ class Main(QMainWindow):
             if not r['newer']:
                 if manual: QMessageBox.information(self, '☁ 檢查更新', f'已經是最新版（V{APP_VERSION}）')
                 return
-            if not manual and ENG.cfg.get('cloud_skip') == v: return
+            if not manual and ENG.cfg.get('cloud_skip') == (f'L{I.get("launcher")}' if I.get('shell_only') else v): return
             if self.ubar.isVisible() and self._ubar_path != 'cloud': return
             notes = list(I.get('notes') or [])[:3]
             self._ubar_path = 'cloud'; self.ubar_go.setText('⬇ 更新'); self.ubar_no.setText('略過這版')
-            self.ubar_l.setText(f'☁ 雲端有新版：V{APP_VERSION} → <b>V{v}</b>' + ('（這次要換 EXE，會自動重開一次）' if I.get('need_shell') else '（下載後熱更新，程式不用關）')
+            self.ubar_l.setText((f'☁ 有新的 EXE（外殼）：第 {os.environ.get("SC_LAUNCHER") or 1} 版 → <b>第 {I.get("launcher")} 版</b>（程式已經是 V{APP_VERSION}；會自動關掉、換好、重新打開）' if I.get('shell_only') else
+                                 f'☁ 雲端有新版：V{APP_VERSION} → <b>V{v}</b>' + ('（這次要換 EXE，會自動重開一次）' if I.get('need_shell') else '（下載後熱更新，程式不用關）'))
                                 + (('　<span style="color:#9fb4c8">' + '；'.join(_hesc(x) for x in notes) + '</span>') if notes else ''))
             self.ubar.show(); upd_log(f'雲端有新版 V{v}（{r.get("url")}）')
         bg(lambda: CU.check(APP_VERSION), done)
@@ -8753,7 +8754,7 @@ class Main(QMainWindow):
         st = {'g': 0, 't': 0}
 
         def job():
-            z = CU.download(I['zip'], ROOT / 'UPDATE' / Path(I['zip']).name.split('?')[0], I.get('zip_sha256', ''), cb=lambda g, t: st.update(g=g, t=t))
+            z = '' if I.get('shell_only') else CU.download(I['zip'], ROOT / 'UPDATE' / Path(I['zip']).name.split('?')[0], I.get('zip_sha256', ''), cb=lambda g, t: st.update(g=g, t=t))
             sh = None
             if I.get('need_shell') and I.get('shell'):
                 sh = CU.download(I['shell'], ROOT / 'UPDATE' / 'shell' / Path(I['shell']).name.split('?')[0], I.get('shell_sha256', ''), cb=lambda g, t: st.update(g=g, t=t))
@@ -8767,7 +8768,7 @@ class Main(QMainWindow):
             self._cloud_busy = False; upd_log(f'雲端更新下載失敗：{ex}'); QMessageBox.warning(self, '☁ 更新', f'下載失敗：{ex}\n\n程式維持原版本，可以稍後再按一次。')
 
         def ok(res):
-            self._cloud_busy = False; zp, shp = res; self._upd_seen.add(zp); upd_log(f'雲端更新：下載好了 {zp}' + (f'、外殼 {shp}' if shp else ''))
+            self._cloud_busy = False; zp, shp = res; self._upd_seen.add(str(zp)); upd_log(f'雲端更新：下載好了 {zp}' + (f'、外殼 {shp}' if shp else ''))
             if shp:                                                             # 要換 EXE：程式包先放 UPDATE（啟動器開機會套用），BAT 等程式關掉換外殼再打開
                 bat = CU.shell_bat(ROOT, shp, os.getpid())
                 if QMessageBox.question(self, '☁ 更新', f'V{v} 下載好了。這次要換 EXE（外殼），SortCut 會關掉、換好後自己重新打開（大約 10～30 秒）。\n\n現在更新？') != QMessageBox.Yes:
@@ -8775,6 +8776,7 @@ class Main(QMainWindow):
                 busy = len(ENG.cv_active) + len(ENG.th_active) + (1 if ENG.cut_cur else 0)
                 if busy and QMessageBox.question(self, '☁ 更新', f'還有 {busy} 個工作在做（重開後會接著做）。確定現在更新？') != QMessageBox.Yes: return
                 CU.run_bat(bat); upd_log('雲端更新：交給外殼更新程式，SortCut 關閉'); self.quitting = True; mark_clean_exit(); self.close(); return
+            if I.get('shell_only'): return
             if not self.upd.load(zp): self.nav.setCurrentRow(5); return
             if self.upd.pkg.get('hot_ok'): self.upd.go()
             else: self.upd.restart_way()
@@ -8782,7 +8784,8 @@ class Main(QMainWindow):
 
     def _ubar_later(self):
         if self._ubar_path == 'cloud':
-            try: ENG.cfg.set('cloud_skip', ((self._cloud or {}).get('info') or {}).get('version'))   # 這版不再自動提示（手動「檢查更新」還是會）
+            I_ = (self._cloud or {}).get('info') or {}
+            try: ENG.cfg.set('cloud_skip', f'L{I_.get("launcher")}' if I_.get('shell_only') else I_.get('version'))   # 這版不再自動提示（手動「檢查更新」還是會）
             except Exception: pass
             self.ubar_go.setText('⚡ 立即熱更新'); self.ubar_no.setText('稍後')
         else: self._upd_seen.add(self._ubar_path)

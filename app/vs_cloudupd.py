@@ -44,10 +44,11 @@ def check(cur_ver, urls=None):
         try:
             with _open(u) as r: info = json.loads(r.read().decode('utf-8-sig'))
             if not info.get('version'): err = f'{u}：update.json 裡沒有版本'; continue
-            newer = vkey(info['version']) > vkey(cur_ver)
-            info['need_shell'] = int(info.get('launcher') or 1) > launcher_ver()
+            info['need_shell'] = bool(info.get('shell')) and int(info.get('launcher') or 1) > launcher_ver()
+            info['shell_only'] = info['need_shell'] and vkey(info['version']) <= vkey(cur_ver)   # V0.6.02 程式已經是最新、只差 EXE 也要提示
+            newer = vkey(info['version']) > vkey(cur_ver) or info['need_shell']
             return {'ok': True, 'newer': newer, 'info': info, 'url': u, 't': time.time(),
-                    'message': f"雲端最新 V{info['version']}" + ('（有新版）' if newer else '（已經是最新）')}
+                    'message': f"雲端最新 V{info['version']}" + ('（程式已是最新，EXE 有新版）' if info['shell_only'] else '（有新版）' if newer else '（已經是最新）')}
         except Exception as ex: err = f'{type(ex).__name__}: {ex}'
     return {'ok': False, 'newer': False, 'info': None, 't': time.time(), 'message': '連不到 GitHub 更新：' + err}
 
