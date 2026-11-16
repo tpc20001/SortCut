@@ -1,0 +1,31 @@
+﻿VideoSift 影片初剪整理 V0.2.28　安裝／換電腦說明
+
+【在新電腦安裝】
+1. 先把要用的硬碟都接上新電腦（舊電腦上已經用 V0.2.28 把資料寫到每顆硬碟上）。
+2. 把這個 zip 解壓縮到任何地方（例如 下載\VideoSift_Kit）。
+3. 點兩下 BUILD_AND_INSTALL.bat：
+   - 自動：裝 Python（沒有的話）、下載 PySide6、下載 FFmpeg 7.1.1（約 90 MB）、做出 VideoSift.exe。
+   - 安裝到 桌面\VideoSift，桌面多一個「VideoSift」捷徑，裝好會自動打開程式。
+   （要跑完整的自我測試：在命令列執行 BUILD_AND_INSTALL.bat -SelfTest）
+4. 打開後約 20 秒，程式會自己找每顆硬碟：
+   - 有 X:\VideoSIFT\.vsdata（舊電腦寫的 VideoSift 資料）→ 直接接上：分級、備註、初剪紀錄、預覽圖都沿用，加進影片庫、重新掃描。
+   - 沒有的硬碟 → 跳過，不動它（之後要用再自己「➕ 加入硬碟／資料夾」）。
+   - 磁碟代號換了也沒關係（靠硬碟序號認）。
+5. 設定（手機網頁、PIN、轉檔設定、轉檔經驗）會從硬碟上最新的那份自動拿回來。
+6. 手機網頁有開的話，會自動在 Tailscale 開好 VideoSift 自己的 HTTPS 埠（:9461，本機 8461），
+   不碰 TikLive 用的 443、不會 reset Tailscale。新電腦的網址不一樣（https://新電腦名稱.xxx.ts.net:9461/），
+   手機要用新網址打開、輸入 PIN、重新「安裝應用程式」一次；VideoSift 和 TikLive 是不同的埠，兩個 App 可以同時開。
+   網址在：設定 → 📱 手機網頁（或 LOG 裡「📱 手機 App 網址」那一行）。
+
+【以後】
+- 預覽圖直接做在影片所在的那顆硬碟上（X:\VideoSIFT\.vsdata\thumbs），紀錄每 10 分鐘、關掉程式時寫到硬碟上。
+- 硬碟拔走接到別台裝了 VideoSift 的電腦，打開就直接接上，不用另外搬。
+- 要拔硬碟前：後台按「💾 現在寫到各硬碟」，或直接關掉程式（關掉時會自動寫）。
+
+資料夾裡有什麼：
+  VideoSift.exe　程式　　app\　程式碼（更新包會換這裡）　　Data\　這台電腦的設定、資料庫
+  LOG\　紀錄　　UPDATE\　更新包放這裡　　ffmpeg.exe／ffprobe.exe
+每顆硬碟上：
+  X:\VideoSIFT\.vsdata\（隱藏資料夾，不要刪）　pack.json、files.sqlite3、thumbs\、global\
+  X:\VideoSIFT\初剪\、收藏\、待刪\、原檔備份\、S_無條件保存\…（跟以前一樣）
+更新：VS_V…zip 丟進 UPDATE 資料夾（或在「版本與更新」選它）→ 熱更新，程式不用關。

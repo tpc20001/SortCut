@@ -1,0 +1,9 @@
+{
+ "id": "FileCompare",
+ "name": "FileCompare",
+ "title": "FileCompare 照片影片整理",
+ "prefix": "FC",
+ "web_port": 8761,
+ "accent": "#2f9bff",
+ "phone_id": "filecompare-phone"
+}

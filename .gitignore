@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+work/
+out/
+dist/
+build/__pycache__/
+app_backup/
+Data/
+LOG/
+UPDATE/
+*.part

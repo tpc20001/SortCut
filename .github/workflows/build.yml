@@ -1,0 +1,70 @@
+# SortCut 雲端打包：推到 main（或在 Actions 頁按 Run workflow）就會在 Windows 雲端電腦上
+#  1) 檢查所有程式檔能不能編譯  2) 用 PyInstaller 打包 EXE（外殼）  3) 做出程式更新包、完整安裝包、update.json
+#  4) 放到 GitHub Releases（標籤 v<版本>；同一版已經發過就不重發，要發新版請改 app/app.py 的 APP_VERSION）
+#
+# 更新檔放哪裡：
+#  - repo 的 Settings → Secrets → Actions 有 RELEASE_TOKEN（能寫 SortCut-Release 的 token）→ 放到公開的 tpc20001/SortCut-Release
+#    （程式碼 repo 可以是 Private，程式下載更新不需要密碼）。要換別的 repo：Settings → Variables 加 RELEASE_REPO。
+#  - 沒有 RELEASE_TOKEN → 放在這個 repo 自己的 Releases（這個 repo 要是 Public，程式才下載得到）。
+name: Build SortCut
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 讀版本
+        id: v
+        shell: bash
+        run: |
+          echo "ver=$(python tools/make_release.py --version)" >> $GITHUB_OUTPUT
+          echo "launcher=$(python tools/make_release.py --launcher)" >> $GITHUB_OUTPUT
+      - name: 決定更新檔放哪個 repo
+        id: r
+        shell: bash
+        env:
+          RT: ${{ secrets.RELEASE_TOKEN }}
+          RR: ${{ vars.RELEASE_REPO }}
+        run: |
+          if [ -n "$RT" ]; then echo "repo=${RR:-${{ github.repository_owner }}/SortCut-Release}" >> $GITHUB_OUTPUT; echo "ext=1" >> $GITHUB_OUTPUT
+          else echo "repo=${{ github.repository }}" >> $GITHUB_OUTPUT; echo "ext=0" >> $GITHUB_OUTPUT; echo "::warning::沒有 RELEASE_TOKEN，更新檔放在這個 repo 自己的 Releases（Private repo 的話程式會下載不到）"; fi
+      - name: 這版發過了嗎
+        id: e
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ steps.v.outputs.ver }}" --repo "${{ steps.r.outputs.repo }}" >/dev/null 2>&1; then echo "exists=1" >> $GITHUB_OUTPUT; echo "::notice::v${{ steps.v.outputs.ver }} 已經發過了，這次只試打包、不重發（要發新版請改 APP_VERSION）"; else echo "exists=0" >> $GITHUB_OUTPUT; fi
+      - name: 裝打包工具
+        run: |
+          python -m pip install --disable-pip-version-check -q --upgrade pip
+          python -m pip install --disable-pip-version-check -q "PySide6>=6.8,<7" pyinstaller
+      - name: 檢查程式檔
+        run: python -c "import py_compile,pathlib; [py_compile.compile(str(f), doraise=True) for f in pathlib.Path('app').glob('*.py')]; [py_compile.compile(str(f), doraise=True) for f in pathlib.Path('build').glob('*.py')]; print('all program files OK')"
+      - name: 打包 EXE（外殼）
+        run: >
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name VideoSift --icon "${{ github.workspace }}\VideoSift.ico"
+          --paths "${{ github.workspace }}\build" --distpath work/dist --workpath work/build --specpath work
+          --collect-submodules PySide6.QtMultimedia --collect-submodules PySide6.QtMultimediaWidgets
+          --hidden-import _deps "${{ github.workspace }}\build\launcher.py"
+      - name: 做更新包和 update.json
+        run: python tools/make_release.py --dist work/dist/VideoSift --out out --repo "${{ steps.r.outputs.repo }}"
+      - uses: actions/upload-artifact@v4
+        with: { name: 'SortCut-V${{ steps.v.outputs.ver }}', path: out/ }
+      - name: 放到 Releases
+        if: github.ref == 'refs/heads/main' && steps.e.outputs.exists == '0'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.v.outputs.ver }}" out/SC_V*.zip out/SC_Shell_L*.zip out/SortCut_Full_V*.zip out/update.json \
+            --repo "${{ steps.r.outputs.repo }}" --title "SortCut V${{ steps.v.outputs.ver }}" --notes-file out/notes.md --latest
