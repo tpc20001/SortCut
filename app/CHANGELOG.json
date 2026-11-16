@@ -1,5 +1,12 @@
 [
  {
+  "version": "0.6.04",
+  "date": "2026-11-17",
+  "items": [
+   "☁ 修：雲端更新出現「連不到 GitHub 更新：CERTIFICATE_VERIFY_FAILED」。Windows 有時候還沒下載 GitHub 用的安全憑證，現在程式自己帶一份；還是不行會改用 Windows 自己下載"
+  ]
+ },
+ {
   "version": "0.6.03",
   "date": "2026-11-17",
   "items": [
