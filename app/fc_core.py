@@ -122,6 +122,12 @@ def run(cmd, timeout=60, prio='normal'):
 
 
 # ---------------------------------------------------------------- LOG
+
+def _mf_active():
+    """V0.6.08 SortCut 的 🛟 主程式優先中？（畫面／手機卡了，整理的背景也先退）."""
+    try: return float(getattr(sys, '_vs_mf', {}).get('until') or 0) > time.time()
+    except Exception: return False
+
 class Log:
     """app_log.txt＝什麼都記（操作、設定變更、工作開始／結束、錯誤一行摘要）；error_log.txt＝錯誤＋完整位置；
     ui_freeze_log.txt＝畫面卡住（含卡在哪一行）；crash_dump.txt＝整個掛掉時每條執行緒在做什麼；update_log.txt＝更新／熱更新；qt_log.txt＝Qt 警告。
@@ -593,7 +599,7 @@ class Engine:
 
     def bg_hold(self, kind):
         """這一項現在不要開新的工作：你按了暫停，或電腦太忙自動讓路；嵌在 SortCut 裡時，VS 正在用同一顆硬碟也先讓路."""
-        return bool(self.bg_pause.get(kind)) or kind in self.bg_auto or self.quiet_now() or bool(self.ext_hold(kind))
+        return bool(self.bg_pause.get(kind)) or kind in self.bg_auto or self.quiet_now() or bool(self.ext_hold(kind)) or _mf_active()   # V0.6.08 🛟 主程式優先
 
     def ext_hold(self, kind):
         """SortCut 設的「先讓路」（EXT_HOLD['fn'](kind) → 原因；空的＝不用讓）."""
@@ -617,6 +623,7 @@ class Engine:
             try: n = int(f_(kind, n))
             except Exception: pass
         if self.bg_slow.get(kind): n = max(1, min(n, int(self.bg_slow[kind])))
+        if _mf_active(): return 1                                               # V0.6.08 🛟 主程式優先
         t0 = self.bg_ramp.get(kind)
         if not t0: return n
         sec = max(0, int(self.cfg.get('bg_ramp_sec') if self.cfg.get('bg_ramp_sec') is not None else 20))

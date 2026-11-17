@@ -237,9 +237,15 @@ class WebServer:
                 if not (tk and any(same(tk, x) for x in (self.E().cfg.get('web_tokens') or []))): self._send(c, Resp(413, b'too big', 'text/plain')); return
             body = f.read(n) if n else b''
             u = urllib.parse.urlsplit(target); req = Req(method, urllib.parse.unquote(u.path), urllib.parse.parse_qs(u.query), H, body, addr[0] if addr else '')
+            try: import vs_mainfirst as MF_; mk_ = MF_.web_begin(req.path)              # V0.6.08 🛟 SortCut 的主程式優先（獨立跑整理時沒有這個檔也沒關係）
+            except Exception: MF_ = None
             try: r = self.route(req)
             except Exception as ex:
                 self._log(f'手機網頁錯誤：{method} {req.path}\n{traceback.format_exc()}'); r = jresp({'ok': False, 'message': f'{type(ex).__name__}: {ex}'}, 500)
+            finally:
+                if MF_ is not None:
+                    try: MF_.web_end(mk_)
+                    except Exception: pass
             try:                                                                    # 大的回應壓縮再送（幾萬部的清單 10 MB → 1～2 MB，手機快很多）（V0.3.29）
                 if not getattr(r, 'file', None) and len(r.body) > 32768 and 'gzip' in (H.get('accept-encoding') or '') and 'Content-Encoding' not in r.headers \
                         and any(x in r.ctype for x in ('json', 'html', 'javascript', 'text/')):

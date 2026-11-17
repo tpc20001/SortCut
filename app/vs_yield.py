@@ -579,6 +579,13 @@ class Yield:
 
     def _thermal(self):
         s = self.sample or {}; al = self.read_alert() if self.on else None; on = self.thermal_on() or bool(al); self.th = getattr(self, 'th', {'cap': None, 'set': None, 'err': ''})
+        try: mf = float(getattr(sys, '_vs_mf', {}).get('until') or 0) > time.time()
+        except Exception: mf = False
+        if mf:                                                                   # V0.6.08 🛟 主程式優先：這邊的 FFmpeg 先壓到 5%
+            if self.th.get('set') != 5.0:
+                try: self.win.job_cap(5.0); self.th.update(set=5.0, cap=5.0, err='')
+                except Exception as ex: self.th['err'] = str(ex)[:120]
+            return
         if not on:
             hc = getattr(self, 'heat_cap', None)                                 # V0.5.82 控溫關著：只有溫度太高時才壓（一熱就停）
             if hc is not None:

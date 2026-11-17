@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.07'
+APP_VERSION = '0.6.08'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -4836,7 +4836,11 @@ class BgPage(QWidget):
         self.cg.setChecked((ENG.cfg.get('cpu_guard') is not False)); self.cmax.setValue(int(ENG.cfg.get('cpu_max') or 90)); self.rsec.setValue(int(ENG.cfg.get('bg_ramp_sec') if ENG.cfg.get('bg_ramp_sec') is not None else 20))
         self.ar = QCheckBox('🛟 閃退自動重開並接續'); self.ar.setChecked(ENG.cfg.get('auto_restart') is not False); self.ar.setToolTip('主程式閃退（不是你關的）4 秒後自動重開，背景工作和排隊接著做；改了下次開程式生效')
         self.ar.toggled.connect(lambda on: ENG.cfg.set('auto_restart', bool(on)))
-        gv.addWidget(flow_row([self.b_allp, self.b_allr, self.cg, self.cmax, self.rsec, self.ar]))
+        self.mfc = QCheckBox('🛟 主程式優先（畫面、手機永遠先；一卡背景馬上退到最低）'); self.mfc.setChecked(ENG.cfg.get('main_first') is not False)
+        self.mfc.setToolTip('V0.6.08：畫面慢了 0.4 秒或手機請求卡 2.5 秒 → 背景工作全部不開新的、同時只做 1 個、FFmpeg 壓到 5%；順了 20 秒才慢慢放回來。\n也會把畫面和手機的執行緒排在前面、背景的排在後面（CPU 100% 時畫面照樣能動）')
+        self.mfc.toggled.connect(lambda on: ENG.cfg.set('main_first', bool(on)))
+        gv.addWidget(flow_row([self.b_allp, self.b_allr, self.mfc, self.cg, self.cmax, self.rsec, self.ar]))
+        self.mfl = QLabel(''); self.mfl.setWordWrap(True); self.mfl.setStyleSheet('color:#f0c27a'); gv.addWidget(self.mfl)
         self.glog = QLabel(''); self.glog.setObjectName('muted'); self.glog.setWordWrap(True); gv.addWidget(self.glog)
         self.b_allp.clicked.connect(lambda: (ENG.bg_all(True), self.refresh_ctl())); self.b_allr.clicked.connect(lambda: (ENG.bg_all(False), self.refresh_ctl()))
         self.cg.toggled.connect(lambda on: ENG.cfg.set('cpu_guard', bool(on))); self.cmax.valueChanged.connect(lambda x: ENG.cfg.set('cpu_max', int(x))); self.rsec.valueChanged.connect(lambda x: ENG.cfg.set('bg_ramp_sec', int(x)))
@@ -4934,6 +4938,10 @@ class BgPage(QWidget):
                 bar_, bpz, bsz = w3; bar_.setVisible(k['pct'] is not None)
                 if k['pct'] is not None: bar_.setValue(int(k['pct'] * 10)); bar_.setFormat(f"{k['pct']:.1f}%（{k['done']:,}／{k['total']:,}）")
                 bpz.setText('▶ 繼續' if k['state'] == 'pause' else '⏸ 暫停'); bsz.setEnabled(bool(k['running']) and k['k'] != 'hotzone')
+        M_ = V.get('mf') or {}
+        try: self.mfl.setText((f"🛟 主程式優先中（{M_.get('why', '')}）：背景先退開，順了 {M_.get('left', 0)} 秒後慢慢放回來" if M_.get('active') else
+                               (f"🛟 畫面很順（慢了 {M_.get('lag_ms', 0)} 毫秒；卡了 {M_.get('n', 0)} 次）" if M_.get('on') else '')))
+        except Exception: pass
         self.glog.setText(f"CPU 現在 {V['cpu']:.0f}%　" + ('　'.join(V['log'][:3]) if V.get('log') else '（自動讓路的紀錄會顯示在這裡）'))
         try:
             self.b_th.blockSignals(True); self.b_th.setChecked(bool(ENG.th_paused)); self.b_th.setText('▶ 繼續預覽圖' if ENG.th_paused else '⏸ 暫停預覽圖'); self.b_th.blockSignals(False)
@@ -8622,6 +8630,9 @@ class Main(QMainWindow):
         self.st_t = QTimer(self); self.st_t.timeout.connect(self._status); self.st_t.start(1000)
         self.face_t = QTimer(self); self.face_t.timeout.connect(lambda: bg(ENG.faces.tick) if getattr(ENG, 'faces', None) is not None and not self._handoff else None); self.face_t.start(30000)   # 👤 夜間時段、同步人物
         self.hb = QTimer(self); self.hb.timeout.connect(lambda: setattr(QApplication.instance(), '_vs_hb', time.time())); self.hb.start(250)   # 給看門狗：畫面還活著
+        try:                                                                    # V0.6.08 🛟 主程式優先：畫面心跳（慢了就叫背景退開）
+            import vs_mainfirst; self.mfhb = QTimer(self); self.mfhb.timeout.connect(vs_mainfirst.beat); self.mfhb.start(100); vs_mainfirst.beat()
+        except Exception: pass
         # 更新提示列：UPDATE 資料夾裡出現新的更新包
         self.ubar = QFrame(); self.ubar.setStyleSheet('QFrame{background:#1f3550;border-bottom:1px solid #4dc9ff}'); ub = QHBoxLayout(self.ubar); ub.setContentsMargins(10, 4, 10, 4)
         self.ubar_l = QLabel(''); ub.addWidget(self.ubar_l, 1); self.ubar_go = QPushButton('⚡ 立即熱更新'); self.ubar_no = QPushButton('稍後'); ub.addWidget(self.ubar_go); ub.addWidget(self.ubar_no)

@@ -353,6 +353,18 @@ class Store:
 
 
 # ---------------------------------------------------------------- 外部程式
+def _mf_active():
+    """V0.6.08 🛟 主程式優先中？（看 sys 上的狀態，不用 import，熱更新也一樣）."""
+    try: return float(getattr(sys, '_vs_mf', {}).get('until') or 0) > time.time()
+    except Exception: return False
+
+
+def _mf_view():
+    try:
+        import vs_mainfirst; return vs_mainfirst.view()
+    except Exception: return None
+
+
 def run(cmd, timeout=60, prio='normal'):
     try:
         p = subprocess.run(cmd, capture_output=True, timeout=timeout, creationflags=NO_WINDOW | PRIO.get(prio, 0), stdin=subprocess.DEVNULL)
@@ -831,6 +843,7 @@ class Engine:
     def bg_hold(self, kind):
         """這一項現在不要開新的工作：你按了暫停，或電腦太忙自動讓路，或不在你設定的時段（🧪 V0.2.31）."""
         if bool(self.bg_pause.get(kind)) or kind in self.bg_auto or bool(self.bg_sched_hold(kind)): return True
+        if _mf_active(): return True                                            # V0.6.08 🛟 主程式優先：畫面／手機卡了，背景先不開新的
         try:
             import vs_yield; return bool(vs_yield.hold(kind))                   # V0.5.71 🤝 TikLive 說「要開始了」又已經 Lv 1：轉檔先不開新的
         except Exception: return False
@@ -881,6 +894,7 @@ class Engine:
         try:                                                                    # V0.5.71 🤝 讓路等級：Lv 10＝照設定，Lv 1＝同時只做 1 個
             import vs_yield; n = vs_yield.cap(kind, n)
         except Exception: pass
+        if _mf_active(): return 1                                               # V0.6.08 🛟 主程式優先
         if self.bg_slow.get(kind): n = max(1, min(n, int(self.bg_slow[kind])))     # 電腦太忙、又沒有更優先的可以讓：先降速（同時少做幾個）
         t0 = self.bg_ramp.get(kind)
         if not t0: return n
@@ -1069,7 +1083,7 @@ class Engine:
                       'ramp': (self.bg_cap(k, 99) if self.bg_ramp.get(k) else None), 'slow': self.bg_slow.get(k)})
         G = self.bg_gov
         return {'kinds': L, 'cpu': round(float(self.perf.cpu or 0), 1), 'guard': (self.cfg.get('cpu_guard') is not False), 'cpu_max': int(self.cfg.get('cpu_max') or 90),
-                'ramp_sec': int(self.cfg.get('bg_ramp_sec') if self.cfg.get('bg_ramp_sec') is not None else 20),
+                'ramp_sec': int(self.cfg.get('bg_ramp_sec') if self.cfg.get('bg_ramp_sec') is not None else 20), 'mf': _mf_view(),
                 'log': [f'{time.strftime("%H:%M:%S", time.localtime(t))} {m}' for t, m in list(G['log'])[-30:]][::-1]}
 
     def alive(self): return not self.stop_all and not self.retired
@@ -1080,6 +1094,9 @@ class Engine:
         try:                                                                    # V0.5.71 🤝 讓路給 TikLive（右上角 Lv 1～10）；熱更新：舊的先停、暫停中的 FFmpeg 放開
             import vs_yield; vs_yield.start(self, self.version)
         except Exception: self.log.err('🤝 讓路給 TikLive')
+        try:                                                                    # V0.6.08 🛟 主程式優先（畫面、手機永遠先；卡了背景馬上退）
+            import vs_mainfirst; vs_mainfirst.attach(self)
+        except Exception: self.log.err('🛟 主程式優先')
         try:                                                                    # V0.5.85 🚚 R 碟清空搬移：上次沒搬完的接著搬
             import vs_rsplit; vs_rsplit.boot(self)
         except Exception: self.log.err('🚚 R 碟清空搬移')

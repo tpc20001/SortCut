@@ -269,9 +269,15 @@ class WebServer:
             u = urllib.parse.urlsplit(target); path = urllib.parse.unquote(u.path)
             req = Req(method, path, urllib.parse.parse_qs(u.query), H, body, addr[0] if addr else '')
             self.reqs += 1
+            try: import vs_mainfirst as MF_; mk_ = MF_.web_begin(path)                  # V0.6.08 🛟 手機的請求卡太久 → 背景先退
+            except Exception: MF_ = None
             try: r = self.route(req)
             except Exception as ex:
                 self._log(f'手機網頁錯誤：{method} {path}\n{traceback.format_exc()}'); r = jresp({'ok': False, 'message': f'{type(ex).__name__}: {ex}'}, 500)
+            finally:
+                if MF_ is not None:
+                    try: MF_.web_end(mk_)
+                    except Exception: pass
             self._send(c, r, method == 'HEAD')
         except Exception: pass
         finally:
@@ -874,6 +880,8 @@ class WebServer:
             if 'on' in d: E.cfg.set('cpu_guard', d['on'] is True or str(d['on']).lower() in ('1', 'true', 'on'))
             if cm is not None: E.cfg.set('cpu_max', cm)
             if rs is not None: E.cfg.set('bg_ramp_sec', rs)
+            if 'mf' in d: E.cfg.set('main_first', d['mf'] is True or str(d['mf']).lower() in ('1', 'true', 'on'))   # V0.6.08 🛟 主程式優先
+            if d.get('mf_lag'): E.cfg.set('mf_lag_ms', max(150, min(3000, int(d['mf_lag']))))
         if a == 'pause': E.bg_set_pause(k, True, '手機')
         elif a == 'resume': E.bg_set_pause(k, False, '手機')
         elif a == 'stop': E.bg_stop_now(k)
@@ -1014,7 +1022,7 @@ class WebServer:
         B = [{'name': a, 't': b, 'size': c} for a, b, c in (E.db_backups() if hasattr(E, 'db_backups') else [])[:30]]
         return {'ok': True, 'roots': R, 'ex_dirs': [str(x) for x in E.cfg.get('ex_dirs') or []], 'ex_names': [str(x) for x in E.cfg.get('ex_names') or []],
                 'cats': [str(x) for x in E.cfg.get('cats') or []], 'backups': B, 'usb': us,
-                'guard': {'on': E.cfg.get('cpu_guard') is not False, 'cpu_max': int(E.cfg.get('cpu_max') or 90), 'ramp_sec': int(E.cfg.get('bg_ramp_sec') if E.cfg.get('bg_ramp_sec') is not None else 20)},
+                'guard': {'on': E.cfg.get('cpu_guard') is not False, 'mf': E.cfg.get('main_first') is not False, 'mf_lag': int(E.cfg.get('mf_lag_ms') or 400), 'cpu_max': int(E.cfg.get('cpu_max') or 90), 'ramp_sec': int(E.cfg.get('bg_ramp_sec') if E.cfg.get('bg_ramp_sec') is not None else 20)},
                 'scan': {'running': bool(E.scan_st.get('running')), 'n': E.scan_st.get('n'), 'cur': E.scan_st.get('cur', '')}}
 
     def api_lib(self, req):
