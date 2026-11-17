@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.06'
+APP_VERSION = '0.6.07'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6076,11 +6076,12 @@ class LvBadge(QWidget):
 class YieldDlg(QDialog):
     """V0.5.71 🤝 讓路給 TikLive：現在幾級、為什麼、TikLive／這邊各用了多少；開關、最高等級、NVENC 上限."""
     def __init__(self, win):
-        super().__init__(win); self.setWindowTitle('🤝 讓路給 TikLive'); self.resize(560, 520); v = QVBoxLayout(self)
+        super().__init__(win); self.setWindowTitle('🤝 讓路／🧠 智能調速'); self.resize(560, 560); v = QVBoxLayout(self)
         self.top = QLabel(); self.top.setWordWrap(True); self.top.setTextFormat(Qt.RichText); v.addWidget(self.top)
         self.tb = QTextBrowser(); v.addWidget(self.tb, 1)
         f = QFormLayout(); v.addLayout(f)
-        self.c_on = QCheckBox('打開（建議一直開著；TikLive 不在這台時也只是不把電腦吃滿）'); self.c_on.setChecked(ENG.cfg.get('yield_on') is not False); f.addRow(self.c_on)
+        self.c_on = QCheckBox('🧠 智能調速：看 CPU／顯示卡／溫度自己調（建議一直開著）'); self.c_on.setChecked(ENG.cfg.get('yield_on') is not False); f.addRow(self.c_on)
+        self.c_tk = QCheckBox('🤝 讓路給 TikLive（這台有跑 TikLive 才勾；另一台取消勾選，上面的調速、%、控溫照樣有）'); self.c_tk.setChecked(ENG.cfg.get('yield_tk') is not False); f.addRow(self.c_tk)
         self.s_max = QSpinBox(); self.s_max.setRange(1, 10); self.s_max.setValue(int(ENG.cfg.get('yield_max') or 10)); self.s_max.setSuffix(' 級'); f.addRow('最高到 Lv', self.s_max)
         self.s_nv = QSpinBox(); self.s_nv.setRange(2, 16); self.s_nv.setValue(int(ENG.cfg.get('nvenc_limit') or 8)); self.s_nv.setSuffix(' 條'); f.addRow('顯示卡 NVENC 最多幾條（整台）', self.s_nv)
         V0 = __import__('vs_yield').view()                                          # V0.5.79 🌡 控溫
@@ -6097,17 +6098,17 @@ class YieldDlg(QDialog):
         self.s_bmx = QSpinBox(); self.s_bmx.setRange(50, 120); self.s_bmx.setValue(int(ENG.cfg.get('heat_board_max') or 85)); self.s_bmx.setSuffix(' °C'); f.addRow('　主機板感測器上限', self.s_bmx)
         self.s_cmx = QSpinBox(); self.s_cmx.setRange(50, 100); self.s_cmx.setValue(int(ENG.cfg.get('heat_cpu') or 80)); self.s_cmx.setSuffix(' °C'); f.addRow('　CPU 溫度上限', self.s_cmx)
         self.cb_bd.currentIndexChanged.connect(self._save)
-        for w_ in (self.c_on, self.s_max, self.s_nv, self.c_th, self.s_thc, self.s_thv, self.s_thg, self.s_sp, self.s_rmn, self.s_rmx, self.s_bmx, self.s_cmx):
+        for w_ in (self.c_on, self.c_tk, self.s_max, self.s_nv, self.c_th, self.s_thc, self.s_thv, self.s_thg, self.s_sp, self.s_rmn, self.s_rmx, self.s_bmx, self.s_cmx):
             (w_.toggled if isinstance(w_, QCheckBox) else w_.valueChanged).connect(self._save)
         b = QPushButton('關閉'); b.clicked.connect(self.accept); v.addWidget(b)
         self.t = QTimer(self); self.t.timeout.connect(self.load); self.t.start(2000); self.load()
 
     def _save(self, *_):
-        ENG.cfg.set('yield_on', bool(self.c_on.isChecked())); ENG.cfg.set('yield_max', int(self.s_max.value())); ENG.cfg.set('nvenc_limit', int(self.s_nv.value()))
+        ENG.cfg.set('yield_on', bool(self.c_on.isChecked())); ENG.cfg.set('yield_tk', bool(self.c_tk.isChecked())); ENG.cfg.set('yield_max', int(self.s_max.value())); ENG.cfg.set('nvenc_limit', int(self.s_nv.value()))
         for k_, w_ in (('heat_spare', self.s_sp), ('heat_rest_min', self.s_rmn), ('heat_rest_max', self.s_rmx), ('heat_board_max', self.s_bmx), ('heat_cpu', self.s_cmx)): ENG.cfg.set(k_, int(w_.value()))
         ENG.cfg.set('heat_board', str(self.cb_bd.currentData() or 'auto'))
         ENG.cfg.set('thermal_on', bool(self.c_th.isChecked())); ENG.cfg.set('thermal_cpu', int(self.s_thc.value())); ENG.cfg.set('thermal_vs_max', int(self.s_thv.value())); ENG.cfg.set('thermal_gpu', int(self.s_thg.value()))
-        ENG.log.w(f'🤝 讓路設定：{"開" if self.c_on.isChecked() else "關"}、最高 Lv {self.s_max.value()}、NVENC {self.s_nv.value()} 條')
+        ENG.log.w(f'🤝 讓路設定：智能調速{"開" if self.c_on.isChecked() else "關"}、TikLive {"讓" if self.c_tk.isChecked() else "不讓"}、最高 Lv {self.s_max.value()}、NVENC {self.s_nv.value()} 條')
 
     def load(self):
         try:

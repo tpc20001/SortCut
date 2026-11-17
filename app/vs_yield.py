@@ -86,7 +86,7 @@ class Gov:
             L[k] = max(1, min(10, lv))
             if L[k] < 10:
                 tkv = float(s.get(k + '_tk') or 0)
-                why[k] = f'{NAMES[k]} 現在 {float(sysv):.0f}%（TikLive {tkv:.0f}%、這邊 {vs:.0f}%）' + (f'，再留 {R[k]:.0f}% 給 TikLive 的高峰' if R.get(k, 0) >= 3 else '')
+                why[k] = f'{NAMES[k]} 現在 {float(sysv):.0f}%（' + (f'TikLive {tkv:.0f}%、' if tk_on else '') + f'這邊 {vs:.0f}%）' + (f'，再留 {R[k]:.0f}% 給 TikLive 的高峰' if R.get(k, 0) >= 3 else '')
         ram = s.get('ram')
         if ram is not None:
             L['ram'] = max(1, min(10, int(10 - (float(ram) - 75.0) / 1.5))) if ram > 75 else 10
@@ -394,7 +394,12 @@ class Yield:
         return ''
 
     # ---- TikLive 那邊寫的
+    def tk_cfg(self):
+        """V0.6.07 這台要不要讓路給 TikLive（另一台沒跑 TikLive：取消勾選；智能調速、%、控溫照樣有）."""
+        return self.cfg('yield_tk') is not False
+
     def read_tk(self):
+        if not self.tk_cfg(): return None
         try:
             p = LINK_DIR / TK_FILE
             if not p.exists(): return None
@@ -405,6 +410,7 @@ class Yield:
     # ---- ⚡ TikLive 的斷電警報（V0.5.80，ResLink 斷電警報協定）：C:\ProgramData\ResLink\alert.json
     def read_alert(self):
         """有效的警報（until 還沒到、沒被解除）：{'id','mode': 'min'|'stop','until','n24','msg',...}；TikLive 沒開也讀得到."""
+        if not self.tk_cfg(): return None                                        # V0.6.07 不讓路給 TikLive：它的斷電警報也不管
         now = time.time(); c = getattr(self, '_al_c', (0.0, None))
         if now - c[0] < 5: return c[1]
         al = None
@@ -500,7 +506,7 @@ class Yield:
     def measure(self):
         W = self.win; now = time.time(); tk = self.read_tk(); s = {'tk': tk}
         P = W.procs(); me = os.getpid()
-        roots = [int(tk['pid'])] if tk and tk.get('pid') else [pid for pid, _pp, n in P if n in TK_NAMES]
+        roots = ([int(tk['pid'])] if tk and tk.get('pid') else [pid for pid, _pp, n in P if n in TK_NAMES]) if self.tk_cfg() else []   # V0.6.07 不讓路給 TikLive：當作這台沒有它
         self.tk_pids = _tree(P, roots) - {me}; vs = _tree(P, [me]) - self.tk_pids; self.vs_pids = vs
         self.media = {pid for pid, _pp, n in P if pid in vs and pid != me and n in MEDIA_NAMES}
         s['tk_seen'] = bool(self.tk_pids)
@@ -653,7 +659,7 @@ class Yield:
     def view(self):
         s = self.sample or {}; tk = self.tk or {}; G = self.gov
         f = lambda k: (None if s.get(k) is None else round(float(s[k]), 1))
-        return {'on': self.on, 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
+        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
                 'tk': bool(s.get('tk_seen')), 'tk_link': bool(tk), 'tk_ver': tk.get('ver'), 'tk_rec': tk.get('rec'), 'tk_conv': tk.get('conv'), 'tk_stt': tk.get('stt'),
                 'burst': G.burst, 'max': G.max_level,
                 'use': {k: {'all': f(k), 'tk': f(k + '_tk'), 'vs': f(k + '_vs')} for k in ('cpu', 'gpu', 'enc', 'dec', 'vram')}, 'ram': f('ram'),

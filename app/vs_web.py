@@ -140,6 +140,7 @@ def yield_api(S, req):
         if S.is_ro(req): return {'ok': False, 'message': '👀 這支手機是唯讀登入：只能看，不能改'}
         d = req.json() or {}; E = S.E()
         if 'on' in d: E.cfg.set('yield_on', bool(d['on']))
+        if 'tk' in d: E.cfg.set('yield_tk', bool(d['tk']))                         # V0.6.07 這台要不要讓路給 TikLive
         if 'max' in d: E.cfg.set('yield_max', max(1, min(10, int(d['max']))))
         if 'nv' in d: E.cfg.set('nvenc_limit', max(2, min(16, int(d['nv']))))
         if 'th_on' in d: E.cfg.set('thermal_on', bool(d['th_on']))                 # V0.5.79 🌡 控溫

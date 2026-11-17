@@ -102,19 +102,20 @@ let LVF=null,LVV=null;
 function lvHTML(){let b='';for(let i=0;i<10;i++)b+=`<i style="height:${5+i}px"></i>`;return `<button type="button" class="lvb" id="lvb" title="🤝 讓路給 TikLive：點一下看詳細"><span class="lvbars">${b}</span><b>Lv–</b></button>`}
 function lvSet(v){LVV=v;document.querySelectorAll('.lvb').forEach(el=>{const on=v.on!==false;el.classList.toggle('off',!on);el.style.setProperty('--lc',v.col||'#2ecc71');
   el.querySelector('b').textContent=on?((v.alert?'⚡':'')+'Lv'+v.level):'OFF';el.querySelectorAll('.lvbars i').forEach((x,i)=>x.classList.toggle('on',on&&i<v.level));
-  el.title=on?`🤝 讓路等級 Lv ${v.level}／10（1＝最讓路、10＝最快）\n${v.why||''}\n點一下看詳細`:'🤝 讓路給 TikLive：關掉了'});
+  el.title=on?`${v.tk_cfg===false?'🧠 智能調速（不讓 TikLive）':'🤝 讓路'}等級 Lv ${v.level}／10（1＝最讓路、10＝最快）\n${v.why||''}\n點一下看詳細`:'🤝 讓路給 TikLive：關掉了'});
   const m=document.getElementById('lvm');if(m)lvBody(m.firstElementChild)}
 async function lvTick(){if(!LVF)return;try{const v=await LVF();if(v&&v.level!=null)lvSet(v)}catch(e){}}
 function lvStart(fn){LVF=fn;lvTick();setInterval(lvTick,3000)}
 function lvBody(box){const v=LVV||{},U=v.use||{},L=v.L||{},N={cpu:'CPU',gpu:'顯示卡',enc:'編碼 NVENC',dec:'解碼',vram:'顯示卡記憶體'},f=x=>x==null?'—':Math.round(x)+'%';
-  const tk=v.tk_link?`✅ TikLive 已連上（${dzE(v.tk_ver||'')}）：錄影 ${v.tk_rec||0} 間、轉檔 ${v.tk_conv||0}、字幕 ${v.tk_stt?'跑':'沒跑'}`:(v.tk?'🟡 TikLive 有在跑，還沒更新到 TK_V1.0.84（用量測的）':'⚪ 這台沒有看到 TikLive');
+  const tk=v.tk_cfg===false?'⚪ 這台不讓路給 TikLive（另一台電腦用）：只看整台電腦忙不忙來調速':v.tk_link?`✅ TikLive 已連上（${dzE(v.tk_ver||'')}）：錄影 ${v.tk_rec||0} 間、轉檔 ${v.tk_conv||0}、字幕 ${v.tk_stt?'跑':'沒跑'}`:(v.tk?'🟡 TikLive 有在跑，還沒更新到 TK_V1.0.84（用量測的）':'⚪ 這台沒有看到 TikLive');
   const R=Object.entries(v.R||{}).filter(([k,x])=>x).map(([k,x])=>`${N[k]||k} ${x}%`).join('、')||'沒有';
   const AL=v.alert?`<p style="color:#e5484d"><b>⚡ TikLive 斷電警報（24 小時內 ${v.alert.n24??'?'} 次）</b>：${dzE(v.alert.msg||'')}<br>這邊照做：轉檔／瘦身不開新的、Lv 1、CPU 上限 2%、同時只做 1 個，到 ${new Date((v.alert.until||0)*1000).toLocaleString()}。要提早解除：到 TikLive 按「解除警報」。</p>`:'';
-  box.innerHTML=`<button class="lvx" data-lv="x">✕</button><h3>🤝 讓路給 TikLive</h3>${AL}<div><span class="lvbig" style="color:${v.col||'#2ecc71'}">Lv ${v.level??'–'}</span> <b>／10</b>
+  box.innerHTML=`<button class="lvx" data-lv="x">✕</button><h3>${v.tk_cfg===false?'🧠 智能調速':'🤝 讓路給 TikLive'}</h3>${AL}<div><span class="lvbig" style="color:${v.col||'#2ecc71'}">Lv ${v.level??'–'}</span> <b>／10</b>
    <span class="lvmu">目標 Lv ${v.target??'–'}・FFmpeg 每秒跑 ${Math.round((v.duty||1)*100)}%</span></div><div>${dzE(v.why||'')}</div><p class="lvmu">${tk}</p>
    <table><tr><th>項目</th><th>整台</th><th>TikLive</th><th>這邊</th><th>允許 Lv</th></tr>${Object.keys(N).map(k=>`<tr><td>${N[k]}</td><td>${f((U[k]||{}).all)}</td><td>${f((U[k]||{}).tk)}</td><td>${f((U[k]||{}).vs)}</td><td>${L[k]??'—'}</td></tr>`).join('')}
    <tr><td>RAM</td><td>${f(v.ram)}</td><td></td><td></td><td>${L.ram??'—'}</td></tr><tr><td>NVENC 條數</td><td>${v.nvenc??'—'}／${v.nvenc_limit||8}</td><td></td><td></td><td>${L.nvenc??'—'}</td></tr></table>
-   <div class="lvrow"><label><input type="checkbox" data-lv="on" ${v.on!==false?'checked':''}> 打開</label><label>最高 <select data-lv="max">${[...Array(10)].map((_,i)=>`<option ${i+1===(v.max||10)?'selected':''}>${i+1}</option>`).join('')}</select> 級</label>
+   <div class="lvrow"><label><input type="checkbox" data-lv="on" ${v.on!==false?'checked':''}> 🧠 智能調速（看 CPU／顯示卡／溫度自己調）</label><label><input type="checkbox" data-lv="tk" ${v.tk_cfg!==false?'checked':''}> 🤝 讓路給 TikLive（這台有跑 TikLive 才勾）</label></div>
+   <div class="lvrow"><label>最高 <select data-lv="max">${[...Array(10)].map((_,i)=>`<option ${i+1===(v.max||10)?'selected':''}>${i+1}</option>`).join('')}</select> 級</label>
    <label>NVENC 最多 <select data-lv="nv">${[...Array(15)].map((_,i)=>`<option ${i+2===(v.nvenc_limit||8)?'selected':''}>${i+2}</option>`).join('')}</select> 條</label></div>
    <div class="lvrow" style="border-top:1px solid rgba(127,140,160,.2);padding-top:8px"><label><input type="checkbox" data-lv="th_on" ${v.th_on?'checked':''}> 🌡 控溫（主機板會過熱斷電）</label>
     <label>整台 CPU 預算 <select data-lv="th_cpu">${[20,25,30,35,40,45,50,55,60,70,80].map(x=>`<option ${x===Math.round(v.th_cpu||45)?'selected':''}>${x}</option>`).join('')}</select>%</label>
