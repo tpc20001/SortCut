@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.05'
+APP_VERSION = '0.6.06'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -852,7 +852,7 @@ def keys_sections():
     except Exception: P = []
     L = lab_cfg()
     if L.get('player_grade'): P += [('1／2／3／4', '播放中分級 S／A／E／F（🧪）'), ('0', '取消分級（🧪）')]
-    return [('全域', [('Ctrl+Shift+H', '🙈 隱私模糊 開／關（🧪）'), ('Ctrl+K', '⌘ 指令面板（🧪）'), ('Ctrl+/', '⌨ 這個快捷鍵一覽（🧪）'), ('Ctrl+L', '回到封面'), ('F1', '說明')]),
+    return [('全域', [('Ctrl+Shift+R', '🗄 封存的功能（R 碟清空搬移）'), ('Ctrl+Shift+H', '🙈 隱私模糊 開／關（🧪）'), ('Ctrl+K', '⌘ 指令面板（🧪）'), ('Ctrl+/', '⌨ 這個快捷鍵一覽（🧪）'), ('Ctrl+L', '回到封面'), ('F1', '說明')]),
             ('檔案總管', [('Ctrl+F', '跳到搜尋框'), ('S／A／E／F', '選到的分級'), ('G', '🤖 照分級建議分級（🧪）'), ('U', '📤 標成／取消「已上傳」（🧪）'), ('Ctrl+Shift+U', '📋 打開上傳看板（🧪）'), ('P', '✅ 標成／取消「已發佈」（🧪）'), ('Ctrl+R', '🎲 隨便抽一部還沒分級的（🧪）'), ('0', '取消分級'), ('N／Shift+N', '下一部／上一部還沒分級的'), ('Enter', '播放'),
                        ('Delete', '移到待刪'), ('Shift+Del', '直接刪除'), ('Ctrl+Z', '復原上一步'), ('PgUp／PgDn', '專注模式：上一部／下一部'), ('滑鼠側鍵', '上一部／下一部（🧪 手勢換部）'), ('Esc', '離開專注模式')]),
             ('播放器（設定裡可以改）', P + ([('B', '🔖 在這裡加時間書籤（🧪）'), ('Shift+B', '✂ 加書籤＋剪這裡前 5 秒～後 10 秒（🧪）')] if L.get('bookmarks') else []) + ([('U／P', '📤 標已上傳／✅ 標已發佈（🧪）')] if L.get('copy_to') else []) + ([('[／]', '🎬 上一個／下一個換場景（🧪）')] if L.get('scenes') else [])),
@@ -4335,7 +4335,9 @@ class RSplitPage(QWidget):
     def __init__(self, win):
         super().__init__(); self.win = win; self.arm = 0; self._busy = False
         v = QVBoxLayout(self); v.setContentsMargins(10, 10, 10, 10)
-        t = QLabel('🚚 R 碟清空搬移（重要）'); t.setObjectName('title'); t.setStyleSheet('color:#ff5252;font-size:20px;font-weight:700'); v.addWidget(t)
+        t = QLabel('🗄 R 碟清空搬移（已封存）'); t.setObjectName('title'); t.setStyleSheet('color:#ff5252;font-size:20px;font-weight:700'); v.addWidget(t)
+        ar = QLabel('🗄 這個功能已經封存：不在左邊選單裡，避免誤按。要再用：電腦按 <b>Ctrl+Shift+R</b>；手機：⚙ 設定 → 📱 手機網頁 最下面「🗄 封存的功能」。搬移紀錄和設定都還在。')
+        ar.setWordWrap(True); ar.setStyleSheet('background:#2a2410;border:1px solid #f0ad4e;border-radius:8px;padding:8px;color:#f0c27a'); v.addWidget(ar)
         w = QLabel('把來源硬碟上<b>所有的檔案</b>分到兩顆硬碟（位置不變，只換磁碟代號：R:\\A\\b.mp4 → S:\\A\\b.mp4）。<br>'
                    '• 開始後 SortCut 和整理的背景工作都先停（不讀 R），搬完自動恢復。<br>'
                    '• 每個檔：<b>複製 → 寫進硬碟 → 確認</b>（⚡ 快速：大小一樣、抽查 5 段一樣；🔎 完整：整檔讀回比指紋），確認過才刪 R 上的那個檔；不一樣的留在 R、下面列清單。<br>'
@@ -8154,11 +8156,12 @@ class NavList(QListWidget):
                                        (26, 'HotZone 圖片分類', '🎨'), (27, '生圖比較', '🖼')]),
               ('HotZone 檔案與硬碟', '#43d9ff', [(11, 'HotZone 總管', '🔥'), (20, 'HotZone 總覽', '📋'), (21, 'HotZone 檔案總管', '🗂'), (22, '搜尋', '🔍'), (23, '空間分析', '📊'),
                                           (28, '影片工具', '🎬'), (29, '傳輸佇列', '⇅'), (30, '資料夾同步', '⇄'), (31, '熱處理', '♨'), (32, '磁碟', '💽')]),
-              ('電腦與背景', '#45d483', [(73, 'R 碟清空搬移（重要）', '🚚'), (2, '後台狀態', '🖥'), (42, '整理的後台', '⚙'), (41, '資料分析', '📈'), (58, '備份檢查', '💾'), (15, '搬硬碟', '🚚'), (16, '新功能工具箱', '🧰'),
+              ('電腦與背景', '#45d483', [(2, '後台狀態', '🖥'), (42, '整理的後台', '⚙'), (41, '資料分析', '📈'), (58, '備份檢查', '💾'), (15, '搬硬碟', '🚚'), (16, '新功能工具箱', '🧰'),
                                     (7, '🧪 實驗工作區', '🧪'), (61, '整理的操作紀錄', '🧾')]),
               ('設定與說明', '#9aa5b3', [(3, '設定：SortCut', '⚙'), (62, '設定：整理（FileCompare）', '🔧'), (33, '設定：HotZone', '🔥'), (5, '版本與更新', '⟳'),
                                      (8, '使用說明', '📖'), (64, '說明：整理', '📖'), (35, '說明：HotZone', '❓'), (4, 'LOG', '📜'), (63, 'LOG：整理', '📜'), (34, 'LOG：HotZone', '📜')])]
     NAMES = {pg: (ic, nm) for _g, _c, L in GROUPS for pg, nm, ic in L}
+    ARCHIVED = {73: ('🗄', 'R 碟清空搬移（封存）')}                               # V0.6.06 封存：不在選單裡，Ctrl+Shift+R 打開
 
     def __init__(self, on_page):
         super().__init__(); self.on_page = on_page; self._page = -1; self._rows = {}; self._items = {}; self._groups = []
@@ -8630,6 +8633,7 @@ class Main(QMainWindow):
         self.cover = CoverPage(self); self.outer.addWidget(self.cover); self.outer.addWidget(self.mainw)
         sc = QShortcut(QKeySequence('Ctrl+L'), self); sc.setContext(Qt.ApplicationShortcut); sc.activated.connect(self.show_cover)
         sck = QShortcut(QKeySequence('Ctrl+K'), self); sck.setContext(Qt.ApplicationShortcut); sck.activated.connect(self.cmd_palette)        # V0.2.30
+        scar = QShortcut(QKeySequence('Ctrl+Shift+R'), self); scar.setContext(Qt.ApplicationShortcut); scar.activated.connect(self.open_archive)   # V0.6.06 🗄 封存的功能
         scu = QShortcut(QKeySequence('Ctrl+Shift+U'), self); scu.setContext(Qt.ApplicationShortcut); scu.activated.connect(lambda: self.up_board_dlg() if lab_cfg().get('copy_to') else self.msg('📋 上傳看板要先打開「📤 複製到上傳資料夾」'))   # V0.4.41
         scpv = QShortcut(QKeySequence('Ctrl+Shift+H'), self); scpv.setContext(Qt.ApplicationShortcut); scpv.activated.connect(lambda: self.b_pv.toggle() if lab_cfg().get('privacy') else self.msg('🙈 隱私模糊在 🧪 實驗工作區 →「🆕 新功能」打開'))
         sckh = QShortcut(QKeySequence('Ctrl+/'), self); sckh.setContext(Qt.ApplicationShortcut); sckh.activated.connect(self.keys_dlg)          # V0.2.39
@@ -9417,7 +9421,15 @@ class Main(QMainWindow):
             self.enter(MODE_DASH[m])
         except Exception: ENG.log.err('🎛 切換')
 
+    def open_archive(self):
+        """V0.6.06 🗄 封存的功能（Ctrl+Shift+R）：R 碟清空搬移不在選單裡，避免誤按."""
+        try:
+            if self.outer.currentIndex() == 0: self.outer.setCurrentIndex(1)
+            self._page(73); self.msg('🗄 封存的功能：R 碟清空搬移（不在選單裡；回選單點左邊任何一項）', 6000)
+        except Exception: ENG.log.err('🗄 打開封存的功能')
+
     def enter(self, page):
+        if int(page) == 73: page = 0                                             # 封存的頁不從封面「上次停在」進去
         self.outer.setCurrentIndex(1); was_ = self.nav.currentRow(); self.nav.setCurrentRow(int(page))
         if was_ == int(page): self._page(int(page))
         for d in getattr(self, '_hidden_dlg', []):
@@ -9455,11 +9467,10 @@ class Main(QMainWindow):
             pm = self.nav.page_mode(i)
             if pm and pm != getattr(self.nav, 'mode', ''): self.nav.mode = pm; self.msw.set(pm); ENG.cfg.set('nav_mode', pm); self.nav.apply_collapse()
         except Exception: pass
-        if i == 73 and hasattr(self, 'rsp'):                                     # V0.5.85 🚚 R 碟清空搬移
+        if i == 73 and hasattr(self, 'rsp'):                                     # V0.5.85 🚚 R 碟清空搬移（V0.6.06 封存：只能用 Ctrl+Shift+R 打開，不記成「上次停在」）
             self.stack.setCurrentIndex(19)
             if self._cover_ready and self.outer.currentIndex() == 0: self.outer.setCurrentIndex(1)
-            if self._cover_ready: ENG.cfg.set('last_page', int(i))
-            try: self.ptitle.setText('🚚 R 碟清空搬移（重要）')
+            try: self.ptitle.setText('🗄 R 碟清空搬移（封存）')
             except Exception: pass
             ENG.log.w('畫面：切到「🚚 R 碟清空搬移」'); self.rsp.refresh(); return
         if i in (70, 71, 72) and hasattr(self, 'dash'):                          # 📊 一頁總覽
