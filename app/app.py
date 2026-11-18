@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.09'
+APP_VERSION = '0.6.10'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6105,8 +6105,14 @@ class YieldDlg(QDialog):
         i_ = self.cb_bd.findData(str(ENG.cfg.get('heat_board') or 'auto')); self.cb_bd.setCurrentIndex(max(0, i_)); f.addRow('　主機板感測器（供電 IC）', self.cb_bd)
         self.s_bmx = QSpinBox(); self.s_bmx.setRange(50, 120); self.s_bmx.setValue(int(ENG.cfg.get('heat_board_max') or 85)); self.s_bmx.setSuffix(' °C'); f.addRow('　主機板感測器上限', self.s_bmx)
         self.s_cmx = QSpinBox(); self.s_cmx.setRange(50, 100); self.s_cmx.setValue(int(ENG.cfg.get('heat_cpu') or 80)); self.s_cmx.setSuffix(' °C'); f.addRow('　CPU 溫度上限', self.s_cmx)
+        self.c_hs = QCheckBox('🤝 跟別的程式握手（FusionStitch）：誰需要 CPU 就讓誰先跑'); self.c_hs.setChecked(ENG.cfg.get('hs_on') is not False); f.addRow(self.c_hs)   # V0.6.10
+        self.s_hp = QSpinBox(); self.s_hp.setRange(0, 10); self.s_hp.setValue(int(ENG.cfg.get('hs_prio') if ENG.cfg.get('hs_prio') is not None else 5))
+        self.s_hp.setToolTip('兩邊都在做重工作時：數字大的先跑；一樣（都是 5）＝平分。使用者在等的那邊永遠先'); f.addRow('　這邊的優先（5＝一樣，大的先）', self.s_hp)
+        hb = QHBoxLayout(); self.b_hb = QPushButton('⏩ 這邊先跑 1 小時'); self.b_hc = QPushButton('取消'); hb.addWidget(self.b_hb); hb.addWidget(self.b_hc); hb.addStretch(1); f.addRow('　', hb)
+        self.b_hb.clicked.connect(lambda: (ENG.cfg.set('hs_boost_until', time.time() + 3600), ENG.log.w('🤝 握手：使用者按了「這邊先跑 1 小時」'), self.load()))
+        self.b_hc.clicked.connect(lambda: (ENG.cfg.set('hs_boost_until', 0), self.load()))
         self.cb_bd.currentIndexChanged.connect(self._save)
-        for w_ in (self.c_on, self.c_tk, self.s_max, self.s_nv, self.c_th, self.s_thc, self.s_thv, self.s_thg, self.s_sp, self.s_rmn, self.s_rmx, self.s_bmx, self.s_cmx):
+        for w_ in (self.c_on, self.c_tk, self.c_hs, self.s_hp, self.s_max, self.s_nv, self.c_th, self.s_thc, self.s_thv, self.s_thg, self.s_sp, self.s_rmn, self.s_rmx, self.s_bmx, self.s_cmx):
             (w_.toggled if isinstance(w_, QCheckBox) else w_.valueChanged).connect(self._save)
         b = QPushButton('關閉'); b.clicked.connect(self.accept); v.addWidget(b)
         self.t = QTimer(self); self.t.timeout.connect(self.load); self.t.start(2000); self.load()
@@ -6115,6 +6121,7 @@ class YieldDlg(QDialog):
         ENG.cfg.set('yield_on', bool(self.c_on.isChecked())); ENG.cfg.set('yield_tk', bool(self.c_tk.isChecked())); ENG.cfg.set('yield_max', int(self.s_max.value())); ENG.cfg.set('nvenc_limit', int(self.s_nv.value()))
         for k_, w_ in (('heat_spare', self.s_sp), ('heat_rest_min', self.s_rmn), ('heat_rest_max', self.s_rmx), ('heat_board_max', self.s_bmx), ('heat_cpu', self.s_cmx)): ENG.cfg.set(k_, int(w_.value()))
         ENG.cfg.set('heat_board', str(self.cb_bd.currentData() or 'auto'))
+        ENG.cfg.set('hs_on', bool(self.c_hs.isChecked())); ENG.cfg.set('hs_prio', int(self.s_hp.value()))
         ENG.cfg.set('thermal_on', bool(self.c_th.isChecked())); ENG.cfg.set('thermal_cpu', int(self.s_thc.value())); ENG.cfg.set('thermal_vs_max', int(self.s_thv.value())); ENG.cfg.set('thermal_gpu', int(self.s_thg.value()))
         ENG.log.w(f'🤝 讓路設定：智能調速{"開" if self.c_on.isChecked() else "關"}、TikLive {"讓" if self.c_tk.isChecked() else "不讓"}、最高 Lv {self.s_max.value()}、NVENC {self.s_nv.value()} 條')
 
@@ -6132,6 +6139,11 @@ class YieldDlg(QDialog):
                        f"<td align=right>{fm((U.get(k) or {}).get('vs'))}</td><td align=right>{(V.get('L') or {}).get(k, '—')}</td></tr>" for k in N)
         tk = ('✅ TikLive 已連上（' + str(V.get('tk_ver') or '') + f"）：錄影 {V.get('tk_rec') or 0} 間、轉檔 {V.get('tk_conv') or 0}、字幕 {'跑' if V.get('tk_stt') else '沒跑'}") if V.get('tk_link') else (
             '🟡 TikLive 有在跑，但還沒更新到 TK_V1.0.84：用量測的（量得到它整串程式用多少，只是不知道它「等一下要開始做什麼」）' if V.get('tk') else '⚪ 這台沒有看到 TikLive')
+        H_ = V.get('hs') or {}; P_ = H_.get('peers') or []; W_ = ['閒著', '背景小工作', '在做重工作', '使用者在等']
+        M_ = {'lead': '✅ 這邊先跑', 'yield': '🤝 讓對方先跑', 'split': '⚖ 跟對方平分', 'alone': '⚪ 各跑各的'}
+        tk += ('<br>' + '<br>'.join(f"🔗 <b>{esc_html(p.get('name') or p.get('app'))}</b> V{esc_html(p.get('ver') or '')}：{W_[int(p.get('want') or 0)]}" + (f"（{esc_html(p.get('what'))}）" if p.get('what') else '') + f"・優先 {p.get('prio', 5)}" for p in P_)
+               if P_ else '<br>⚪ 沒有看到 FusionStitch（它更新到有握手的版本、而且開著，就會出現）')
+        if H_.get('mode'): tk += f"<br><b>{M_.get(H_['mode'], H_['mode'])}</b>" + (f"：{esc_html(H_.get('why'))}" if H_.get('why') else '') + (f"・這邊先跑還剩 {-(-int(H_['boost']) // 60)} 分" if H_.get('boost') else '')
         h = (f"<p>{tk}</p><table cellspacing=0 cellpadding=3 width=100%><tr><th align=left>項目</th><th align=right>整台</th><th align=right>TikLive</th><th align=right>這邊</th><th align=right>這項允許 Lv</th></tr>{rows}"
              f"<tr><td>RAM</td><td align=right>{fm(V.get('ram'))}</td><td></td><td></td><td align=right>{(V.get('L') or {}).get('ram', '—')}</td></tr>"
              f"<tr><td>NVENC 條數</td><td align=right>{V.get('nvenc') if V.get('nvenc') is not None else '—'}／{V.get('nvenc_limit')}</td><td></td><td></td><td align=right>{(V.get('L') or {}).get('nvenc', '—')}</td></tr></table>"

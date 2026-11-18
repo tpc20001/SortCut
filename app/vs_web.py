@@ -147,6 +147,9 @@ def yield_api(S, req):
         if 'th_cpu' in d: E.cfg.set('thermal_cpu', max(15, min(95, int(d['th_cpu']))))
         if 'th_vs' in d: E.cfg.set('thermal_vs_max', max(2, min(60, int(d['th_vs']))))
         if 'th_gpu' in d: E.cfg.set('thermal_gpu', max(50, min(95, int(d['th_gpu']))))
+        if 'hs_on' in d: E.cfg.set('hs_on', bool(d['hs_on']))                     # V0.6.10 🤝 跟別的程式握手（FusionStitch）
+        if 'hs_prio' in d: E.cfg.set('hs_prio', max(0, min(10, int(d['hs_prio']))))
+        if 'hs_boost' in d: E.cfg.set('hs_boost_until', (time.time() + max(0, min(480, int(d['hs_boost']))) * 60) if int(d['hs_boost']) > 0 else 0)
         try: E.log.w(f'🤝 手機改讓路設定：{d}')
         except Exception: pass
     v = Y_.view(); v['ok'] = True; return v

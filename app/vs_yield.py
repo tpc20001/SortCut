@@ -122,7 +122,7 @@ class Gov:
         else: self.t_hi = 0.0
         if self.level >= 10: self.why = '電腦還很空：全速（每一項仍留一段給 TikLive，不會吃滿）'
         elif bound in why: self.why = why[bound]
-        elif self.level >= self.max_level and self.max_level < 10: self.why = f'你設定最高 Lv {self.max_level}'
+        elif self.level >= self.max_level and self.max_level < 10: self.why = getattr(self, 'cap_why', '') or f'你設定最高 Lv {self.max_level}'
         elif self.level < tgt: self.why = f'慢慢加速中（目標 Lv {tgt}）'
         else: self.why = '照目前的空間'
         if self.level != old: self.log.append((now, old, self.level, self.why))
@@ -346,7 +346,7 @@ class Yield:
     def __init__(self, E=None, ver=''):
         self.E = E; self.ver = str(ver); self.stop = False; self.gov = Gov(); self.sample = {}; self.tk = None; self.tk_pids = set(); self.vs_pids = set()
         self.media = set(); self.lowered = set(); self.suspended = set(); self.win = None; self.err = ''; self.t = 0.0; self.nv_t = 0.0; self.nv = None
-        self.on = True
+        self.on = True; self.hs = None; self.hs_d = {'mode': 'alone', 'why': '', 'peers': []}
         try:
             import vs_heat; self.heat = vs_heat.Heat()                           # V0.5.81 🌡 轉檔看溫度＋自己學
             if E is not None: vs_heat.Heat.table(E.db); self.heat.learn(E.db)
@@ -383,6 +383,8 @@ class Yield:
         if al and kind in ('conv', 'slim', 'enc'):                              # ⚡ 斷電警報：轉檔／瘦身不開新的（stop 和 min 都是，比較保險）
             return f"⚡ TikLive 斷電警報（24 小時內 {al.get('n24', '?')} 次）：轉檔／瘦身先不開新的，到 {time.strftime('%m-%d %H:%M', time.localtime(float(al['until'])))}"
         if not self.on: return ''
+        D_ = getattr(self, 'hs_d', None) or {}
+        if kind in ('conv', 'slim', 'enc') and D_.get('no_new_heavy'): return f'🤝 {D_.get("why", "")}：轉檔／瘦身先不開新的，跑到一半的照跑（慢慢跑）'   # V0.6.10 握手
         if kind in ('conv', 'slim', 'enc') and self.gov.level <= 2 and self.tk_pids: return f'🤝 讓路給 TikLive（Lv {self.gov.level}）：轉檔／瘦身先不開新的，跑到一半的照跑完　{self.gov.why}'   # V0.5.78 不再暫停 FFmpeg，改成低等級時不開新的
         if kind in ('conv', 'slim', 'enc') and (self.gov.detail.get('L') or {}).get('nvenc', 10) <= 1: return '🤝 NVENC 條數不夠，留給 TikLive'
         H = getattr(self, 'heat', None)
@@ -553,6 +555,7 @@ class Yield:
                 self.on = self.cfg('yield_on') is not False
                 self.gov.max_level = max(1, min(10, int(self.cfg('yield_max') or 10))); self.gov.nvenc_limit = max(2, int(self.cfg('nvenc_limit') or 8))
                 self.sample = self.measure(); self.tk = self.sample.get('tk'); old = self.gov.level
+                self._handshake()                                                    # V0.6.10 🤝 先決定讓不讓（壓最高等級），再算等級
                 self.gov.step(self.sample); self.t = time.time()
                 al = self.read_alert()
                 if al and self.on:                                                    # ⚡ 斷電警報：直接 Lv 1
@@ -572,6 +575,43 @@ class Yield:
             time.sleep(2.0)
         self._resume_all()
 
+    # ---- 🤝 跟別的程式握手（V0.6.10，app_handshake.py：例如 FusionStitch）
+    def _hs_state(self):
+        """告訴對方：我現在要做什麼（want）、使用者設的優先（prio）、用了多少."""
+        E = self.E; s = self.sample or {}; now = time.time()
+        run = {}
+        try:
+            for k, _i, n in E.BG_KINDS:
+                c = int(E.bg_running(k) or 0)
+                if c: run[n] = c
+        except Exception: pass
+        heavy = sum(v for n, v in run.items() if n in ('轉檔',)) + len(self.media)
+        boost = float(self.cfg('hs_boost_until') or 0) > now
+        want = 3 if boost else (2 if heavy else (1 if run else 0))
+        what = ('使用者按了「這邊先跑」' if boost else '') or '、'.join(f'{n} {c}' for n, c in run.items())
+        return {'on': self.cfg('hs_on') is not False, 'want': want, 'prio': int(self.cfg('hs_prio') if self.cfg('hs_prio') is not None else 5), 'what': what,
+                'use': {'cpu': round(float(s.get('cpu_vs') or 0), 1), 'gpu': round(float(s.get('gpu_vs') or 0), 1), 'nvenc': int(len(self.media) and (s.get('nvenc_used') or 0)),
+                        'disks': sorted(s.get('vs_drives') or [])},
+                'max': {'nvenc': int(self.gov.nvenc_limit or 8)}}
+
+    def _handshake(self):
+        try:
+            if self.hs is None:
+                import app_handshake as HS
+                self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state).start()
+            d = self.hs.decide(); self.hs_d = d; self.gov.cap_why = ''
+            if not self.on or d.get('mode') not in ('yield', 'split'): return
+            cap_lv = (2 if d.get('no_new_heavy') else 4) if d['mode'] == 'yield' else 6
+            if cap_lv < self.gov.max_level: self.gov.max_level = cap_lv; self.gov.cap_why = '🤝 ' + d.get('why', '')
+            if self.gov.level > cap_lv:
+                self.gov.level = cap_lv; self.gov.target = min(self.gov.target, cap_lv); self.gov.t_drop = time.time(); self.gov.why = '🤝 ' + d.get('why', '')
+            if d.get('nvenc_cap') is not None: self.gov.nvenc_limit = max(1, min(self.gov.nvenc_limit, int(d['nvenc_cap']) or 1))
+        except Exception as ex: self.err = f'握手：{ex}'[:160]
+
+    def hs_cpu_cap(self):
+        D_ = getattr(self, 'hs_d', None) or {}
+        return float(D_['cpu_cap']) if (self.on and D_.get('cpu_cap') is not None) else None
+
     # ---- 🌡 控溫（V0.5.79）：主機板電源 IC 會過熱斷電 → 整台電腦的 CPU 壓在預算內，這邊只用剩下的（可以慢）
     def thermal_on(self):
         v = self.cfg('thermal_on')
@@ -588,6 +628,8 @@ class Yield:
             return
         if not on:
             hc = getattr(self, 'heat_cap', None)                                 # V0.5.82 控溫關著：只有溫度太高時才壓（一熱就停）
+            hsc = self.hs_cpu_cap()                                              # V0.6.10 🤝 握手：讓路／平分時這邊的 FFmpeg 上限
+            if hsc is not None: hc = hsc if hc is None else min(hc, hsc)
             if hc is not None:
                 if self.th.get('set') is None or abs(hc - self.th['set']) >= 2:
                     try: self.win.job_cap(hc); self.th.update(set=round(hc, 1), cap=round(hc, 1), err='')
@@ -604,6 +646,8 @@ class Yield:
         if al: cap = mn                                                          # ⚡ 斷電警報：CPU 上限最低
         hc = getattr(self, 'heat_cap', None)
         if hc is not None: cap = max(mn, min(cap, hc))                           # 🌡 涓流／一熱就停
+        hsc = self.hs_cpu_cap()
+        if hsc is not None: cap = max(mn, min(cap, hsc))                         # V0.6.10 🤝 握手
         old = self.th.get('set')
         if old is None or abs(cap - old) >= 2 or (cap <= mn + 0.1 and old > mn + 0.1):
             try: self.win.job_cap(cap); self.th.update(set=round(cap, 1), err='')
@@ -659,6 +703,9 @@ class Yield:
 
     def close(self):
         self.stop = True
+        try:
+            if self.hs is not None: self.hs.stop(remove=False)                  # 熱更新：新的那個接著寫同一個檔
+        except Exception: pass
         try: self._resume_all()
         except Exception: pass                                                   # 🌡 CPU 上限留著：熱更新後新的那個接手（同一個工作物件）
 
@@ -668,7 +715,10 @@ class Yield:
         f = lambda k: (None if s.get(k) is None else round(float(s[k]), 1))
         Pf_ = getattr(self.E, 'perf', None)
         cpu_src = {'src': getattr(Pf_, 'cpu_src', ''), 'old': getattr(Pf_, 'cpu_old', None)}
-        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'cpu_src': cpu_src, 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
+        D_ = dict(getattr(self, 'hs_d', None) or {})
+        hs_ = {'on': self.cfg('hs_on') is not False, 'prio': int(self.cfg('hs_prio') if self.cfg('hs_prio') is not None else 5), 'mode': D_.get('mode'), 'why': D_.get('why', ''),
+               'peers': D_.get('peers') or [], 'boost': max(0, int(float(self.cfg('hs_boost_until') or 0) - time.time())), 'me': (self.hs.me if self.hs is not None else {}), 'err': (self.hs.err if self.hs is not None else '')}
+        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'cpu_src': cpu_src, 'hs': hs_, 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
                 'tk': bool(s.get('tk_seen')), 'tk_link': bool(tk), 'tk_ver': tk.get('ver'), 'tk_rec': tk.get('rec'), 'tk_conv': tk.get('conv'), 'tk_stt': tk.get('stt'),
                 'burst': G.burst, 'max': G.max_level,
                 'use': {k: {'all': f(k), 'tk': f(k + '_tk'), 'vs': f(k + '_vs')} for k in ('cpu', 'gpu', 'enc', 'dec', 'vram')}, 'ram': f('ram'),
