@@ -672,8 +672,36 @@ def send_to_recycle(path):
 class Perf:
     def __init__(self, log):
         self.log = log; self.cpu = 0.0; self.ram = 0.0; self.ram_used = 0; self.ram_total = 0; self.gpu = None; self.H = {k: deque(maxlen=180) for k in ('cpu', 'ram', 'gpu', 'enc', 'dec', 'vram')}
-        self._ct = None; self.stop = False; self.smi = shutil.which('nvidia-smi') or (r'C:\Windows\System32\nvidia-smi.exe' if IS_WIN and Path(r'C:\Windows\System32\nvidia-smi.exe').exists() else '')
+        self._ct = None; self.cpu_old = None; self.cpu_src = 'GetSystemTimes'; self._pdh = None; self.stop = False; self.smi = shutil.which('nvidia-smi') or (r'C:\Windows\System32\nvidia-smi.exe' if IS_WIN and Path(r'C:\Windows\System32\nvidia-smi.exe').exists() else '')
         threading.Thread(target=self._loop, name='VsPerf', daemon=True).start()
+
+    def _pdh_cpu(self):
+        """V0.6.09 跟工作管理員一樣的算法：\\Processor Information(_Total)\\% Processor Utility（Win8 以後的工作管理員用這個）。
+        舊算法 GetSystemTimes 在有些電腦（例如裝了 VMware／Hyper-V、或開了核心隔離）會多算很多，CPU 明明很閒卻顯示 90～100%."""
+        if not IS_WIN: return None
+        import ctypes
+        from ctypes import wintypes as W
+        if self._pdh is None:
+            self._pdh = False
+            try:
+                P = ctypes.WinDLL('pdh')
+                P.PdhOpenQueryW.argtypes = [W.LPCWSTR, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+                P.PdhAddEnglishCounterW.argtypes = [ctypes.c_void_p, W.LPCWSTR, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+                P.PdhCollectQueryData.argtypes = [ctypes.c_void_p]
+                class FMT(ctypes.Structure): _fields_ = [('CStatus', W.DWORD), ('pad', W.DWORD), ('doubleValue', ctypes.c_double)]
+                P.PdhGetFormattedCounterValue.argtypes = [ctypes.c_void_p, W.DWORD, ctypes.POINTER(W.DWORD), ctypes.POINTER(FMT)]
+                q = ctypes.c_void_p()
+                if P.PdhOpenQueryW(None, 0, ctypes.byref(q)) == 0:
+                    for path, src in (('\\Processor Information(_Total)\\% Processor Utility', '工作管理員算法'), ('\\Processor(_Total)\\% Processor Time', 'PDH Processor Time')):
+                        h = ctypes.c_void_p()
+                        if P.PdhAddEnglishCounterW(q, path, 0, ctypes.byref(h)) == 0:
+                            P.PdhCollectQueryData(q); self._pdh = (P, q, h, FMT); self.cpu_src = src; break
+            except Exception: self._pdh = False
+        if not self._pdh: return None
+        P, q, h, FMT = self._pdh; v = FMT()
+        if P.PdhCollectQueryData(q) != 0: return None
+        if P.PdhGetFormattedCounterValue(h, 0x00000200 | 0x00001000, None, ctypes.byref(v)) != 0 or v.CStatus not in (0, 1): return None   # PDH_FMT_DOUBLE | PDH_FMT_NOCAP100
+        return max(0.0, min(100.0, float(v.doubleValue)))
 
     def _cpu_times(self):
         if IS_WIN:
@@ -708,8 +736,12 @@ class Perf:
                 idle, tot = self._cpu_times()
                 if self._ct:
                     di, dt = idle - self._ct[0], tot - self._ct[1]
-                    self.cpu = max(0.0, min(100.0, 100.0 * (1 - di / dt))) if dt > 0 else 0.0
+                    self.cpu_old = max(0.0, min(100.0, 100.0 * (1 - di / dt))) if dt > 0 else 0.0
                 self._ct = (idle, tot)
+                try: pc = self._pdh_cpu()
+                except Exception: pc = None
+                if pc is not None: self.cpu = pc                                # V0.6.09 跟工作管理員一樣
+                elif self.cpu_old is not None: self.cpu = self.cpu_old; self.cpu_src = 'GetSystemTimes'
                 self.ram_used, self.ram_total = self._ram(); self.ram = 100.0 * self.ram_used / self.ram_total if self.ram_total else 0
             except Exception: pass
             if self.smi and k % 2 == 0:

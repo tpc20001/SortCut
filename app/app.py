@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.08'
+APP_VERSION = '0.6.09'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6124,7 +6124,8 @@ class YieldDlg(QDialog):
         except Exception as ex: self.top.setText(f'讀不到：{ex}'); return
         c = V.get('col') or '#2ecc71'
         self.top.setText(f"<span style='font-size:26px;font-weight:800;color:{c}'>Lv {V.get('level')}</span>　<b>／10</b>　"
-                         f"<span style='color:#8994a4'>目標 Lv {V.get('target', '—')}・FFmpeg 每秒跑 {round(float(V.get('duty') or 1) * 100)}%</span><br>{V.get('why') or ''}")
+                         f"<span style='color:#8994a4'>目標 Lv {V.get('target', '—')}・FFmpeg 每秒跑 {round(float(V.get('duty') or 1) * 100)}%</span><br>{V.get('why') or ''}"
+                         + (lambda c_: f"<br><span style='color:#8994a4'>CPU 用{c_.get('src') or '—'}量" + (f"（舊算法是 {float(c_['old']):.0f}%，只給你對照）" if c_.get('old') is not None and c_.get('src') != 'GetSystemTimes' else '') + '</span>')(V.get('cpu_src') or {}))
         U = V.get('use') or {}; N = {'cpu': 'CPU', 'gpu': '顯示卡', 'enc': '顯示卡編碼（NVENC）', 'dec': '顯示卡解碼', 'vram': '顯示卡記憶體'}
         fm = lambda x: '—' if x is None else f'{x:.0f}%'
         rows = ''.join(f"<tr><td>{N[k]}</td><td align=right>{fm((U.get(k) or {}).get('all'))}</td><td align=right>{fm((U.get(k) or {}).get('tk'))}</td>"

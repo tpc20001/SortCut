@@ -666,7 +666,9 @@ class Yield:
     def view(self):
         s = self.sample or {}; tk = self.tk or {}; G = self.gov
         f = lambda k: (None if s.get(k) is None else round(float(s[k]), 1))
-        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
+        Pf_ = getattr(self.E, 'perf', None)
+        cpu_src = {'src': getattr(Pf_, 'cpu_src', ''), 'old': getattr(Pf_, 'cpu_old', None)}
+        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'cpu_src': cpu_src, 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
                 'tk': bool(s.get('tk_seen')), 'tk_link': bool(tk), 'tk_ver': tk.get('ver'), 'tk_rec': tk.get('rec'), 'tk_conv': tk.get('conv'), 'tk_stt': tk.get('stt'),
                 'burst': G.burst, 'max': G.max_level,
                 'use': {k: {'all': f(k), 'tk': f(k + '_tk'), 'vs': f(k + '_vs')} for k in ('cpu', 'gpu', 'enc', 'dec', 'vram')}, 'ram': f('ram'),
