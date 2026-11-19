@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / 'app'
+SHELL_REQ = 1          # V0.6.12 程式最少要第幾版 EXE（外殼）才能跑。只有程式真的用到新 EXE 的功能才加一；其他時候不會叫使用者換外殼
 OK_EXT = ('.py', '.json', '.md', '.txt', '.css', '.js', '.html', '.png', '.ico', '.svg')   # 跟程式裡 load_pkg 認得的一樣
 
 
@@ -81,7 +82,7 @@ def main():
     try: C = json.loads((APP / 'CHANGELOG.json').read_text(encoding='utf-8'))
     except Exception: C = []
     cur = next((e for e in C if str(e.get('version')) == ver), None) or {}
-    info = {'version': ver, 'launcher': L, 'date': cur.get('date', ''), 'tag': tag, 'notes': list(cur.get('items') or []),
+    info = {'version': ver, 'launcher': L, 'shell_req': SHELL_REQ, 'date': cur.get('date', ''), 'tag': tag, 'notes': list(cur.get('items') or []),
             'zip': base + files['zip'].name, 'zip_sha256': sha(files['zip']), 'zip_size': files['zip'].stat().st_size}
     if 'shell' in files:
         info.update(shell=base + files['shell'].name, shell_sha256=sha(files['shell']), shell_size=files['shell'].stat().st_size,

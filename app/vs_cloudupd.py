@@ -82,7 +82,7 @@ def check(cur_ver, urls=None):
                 try: tp.unlink()
                 except Exception: pass
             if not info.get('version'): err = f'{u}：update.json 裡沒有版本'; continue
-            info['need_shell'] = bool(info.get('shell')) and int(info.get('launcher') or 1) > launcher_ver()
+            info['need_shell'] = bool(info.get('shell')) and int(info.get('shell_req') or 1) > launcher_ver()   # V0.6.12 只有程式真的需要新 EXE 才換（使用者不要一直換外殼）
             info['shell_only'] = info['need_shell'] and vkey(info['version']) <= vkey(cur_ver)   # V0.6.02 程式已經是最新、只差 EXE 也要提示
             newer = vkey(info['version']) > vkey(cur_ver) or info['need_shell']
             return {'ok': True, 'newer': newer, 'info': info, 'url': u, 't': time.time(),
