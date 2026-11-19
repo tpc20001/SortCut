@@ -5446,6 +5446,9 @@ class Engine:
         """V0.1.75 排隊轉檔全部還要多久（保守估、多抓）：照最近 3 小時實際轉完的「每小時處理幾小時的影片」（含找設定、抽查的時間），
         打 7 折再加 10%；還沒有紀錄就用現在合計倍速打 6 折、每部再加 1 分鐘."""
         now = time.time(); left_s = 0.0; n = 0
+        if self.cv_paused and not self.cv_active:                               # V0.6.13 暫停中：不要算出「還要 2 萬天」這種數字
+            n_ = int((self.db.one('SELECT COUNT(*) FROM files WHERE cv_state IN (1,2) AND missing=0') or [0])[0] or 0)
+            return {'n': n_, 'eta': 0, 'left_s': 0, 'basis': '⏸ 轉檔暫停中（你按的）：排隊的都在等，按「▶ 轉檔繼續」才會開始轉', 'paused': True}
         for r in self.db.q('SELECT id,dur FROM files WHERE cv_state IN (1,2) AND missing=0'):
             J = self.cv_active.get(int(r['id'])); d = float(r['dur'] or 0)
             left_s += d * (1 - (float(J.get('pct') or 0) / 100 if J else 0)); n += 1

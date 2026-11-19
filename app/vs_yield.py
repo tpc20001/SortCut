@@ -52,7 +52,7 @@ class Gov:
     def __init__(self, max_level=10, nvenc_limit=8):
         self.level = 5; self.target = 5; self.why = '剛開始，先用中間的速度'; self.t_drop = 0.0; self.t_rise = 0.0; self.t_hi = 0.0
         self.full = dict(FULL0); self.tk_hist = deque(maxlen=400); self.max_level = int(max_level); self.nvenc_limit = int(nvenc_limit)
-        self.detail = {}; self.hist = deque(maxlen=180); self.log = deque(maxlen=60); self.burst = False
+        self.detail = {}; self.hist = deque(maxlen=180); self.log = deque(maxlen=60); self.burst = False; self.recent = {}
 
     def _learn(self, s):
         """這邊實際用了多少 ÷ 目前等級 → 推 Lv 10 會用多少（慢慢平均，只在真的有在做事時學）."""
@@ -80,7 +80,11 @@ class Gov:
             if not tk_on: cap = min(95.0, cap + 10.0)                                       # 這台沒有 TikLive：只要不把電腦吃滿就好
             sysv = s.get(k)
             if sysv is None: continue
-            vs = float(s.get(k + '_vs') or 0); others = max(0.0, float(sysv) - vs)          # 不是這邊用的（TikLive＋其他程式）
+            vs = float(s.get(k + '_vs') or 0)
+            if not tk_on:                                                                   # V0.6.13 沒有 TikLive：看最近 10 秒的平均（一下子的尖峰不用馬上掉到 Lv 1）
+                q_ = self.recent.setdefault(k, deque(maxlen=5)); q_.append((float(sysv), vs))
+                sysv = sum(a for a, _b in q_) / len(q_); vs = sum(b for _a, b in q_) / len(q_)
+            others = max(0.0, float(sysv) - vs)          # 不是這邊用的（TikLive＋其他程式）
             room = cap - R.get(k, 0.0) - others                                              # 這邊最多還能用多少
             lv = int(math.floor(10.0 * room / max(5.0, self.full[k]))) if room > 0 else 1
             L[k] = max(1, min(10, lv))

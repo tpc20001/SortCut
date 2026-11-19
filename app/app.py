@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.12'
+APP_VERSION = '0.6.13'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -3519,6 +3519,7 @@ class ConvPage(QWidget):
         self.sum_t = QTimer(self); self.sum_t.timeout.connect(self._set_sum); self.sum_t.start(3000); QTimer.singleShot(500, self._set_sum)
         self.b_pause = QPushButton('⏸ 暫停轉檔'); self.b_pause.setCheckable(True); self.rsort = QComboBox()
         for k, nm in CONV_SORTS: self.rsort.addItem(nm, k)
+        self.rsort.setCurrentIndex(max(0, self.rsort.findData('size_desc')))          # V0.6.13 重新排序預設：大 → 小
         self.b_resort = QPushButton('排隊重新排序'); self.b_rm = QPushButton('從排隊拿掉選取的'); self.b_cancel = QPushButton('✖ 全部取消'); self.b_cancel.setStyleSheet('QPushButton{color:#ff6577}')
         self.qsum = QLabel(''); self.qsum.setObjectName('muted')
         self.qeta = QLabel(''); self.qeta.setTextFormat(Qt.RichText); self.qeta.setWordWrap(True)
