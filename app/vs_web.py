@@ -916,7 +916,7 @@ class WebServer:
             ALL = d.get('all') is True                                          # V0.1.87「全部」要明講（以前空的就當全部：選取被清掉時會動到全部的檔）
             if a in ('cancel', 'purge', 'redo', 'reverify', 'stage', 'undo') and not ids and not ALL: return jresp({'ok': False, 'message': '沒有選任何一部'}, 400)
             if a == 'add_filtered':
-                n = E.conv_add_filtered(d.get('exts') or [], d.get('smin') or 0, d.get('smax') or 0, d.get('folders') or [], d.get('sort') or 'smart', d.get('kind') or 'nonmp4')
+                n = E.conv_add_filtered(d.get('exts') or [], d.get('smin') or 0, d.get('smax') or 0, d.get('folders') or [], d.get('sort') or 'size_desc', d.get('kind') or 'nonmp4', int(d.get('limit') or 0))
                 r = {'ok': True, 'n': n, 'message': f'已排入 {n:,} 部'}
             elif a == 'add': n = E.conv_add(ids); r = {'ok': True, 'n': n, 'message': f'已排入 {n} 部'}
             elif a == 'cancel': n = E.conv_cancel(ids or None); r = {'ok': True, 'message': f'取消 {n or 0} 部'}
@@ -958,6 +958,11 @@ class WebServer:
             w_, a_ = E.conv_where(None, smin, smax, F, (0, 4, 5), kind)
             c['exts'] = [[e, n, b or 0] for e, n, b in E.db.q(f'SELECT ext, COUNT(*), SUM(size) FROM files WHERE {w_} GROUP BY ext ORDER BY 3 DESC', a_)]
             c['ratio'] = E.conv_ratio(); c['ok'] = True; return jresp(c)
+        if a == 'plan':                                                         # V0.6.11 📏 數量與目標
+            L = lambda k: [x for x in (req.q(k) or '').split(',') if x]
+            P = E.conv_plan(L('exts'), float(req.q('smin') or 0), float(req.q('smax') or 0), [x for x in (req.q('folders') or '').split('|') if x],
+                            req.q('sort') or 'size_desc', req.q('kind') or 'nonmp4', int(float(req.q('n') or 0)), float(req.q('t') or 0))
+            return jresp(P)
         if a == 'queue':
             R = E.conv_queue(1000); return jresp({'ok': True, 'rows': R, 'paused': bool(E.cv_paused), 'total': len(R), 'eta': E.conv_eta()})
         if a == 'done':

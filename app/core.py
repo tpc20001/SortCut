@@ -5404,11 +5404,38 @@ class Engine:
         except Exception: pass
         return out
 
-    def conv_add_filtered(self, exts=None, smin=0, smax=0, folders=None, sort='size_desc', kind='nonmp4'):
-        """照範圍＋排序一次加進排隊（排在現有排隊的後面）."""
+    def conv_add_filtered(self, exts=None, smin=0, smax=0, folders=None, sort='size_desc', kind='nonmp4', limit=0):
+        """照範圍＋排序一次加進排隊（排在現有排隊的後面）；limit＞0＝只加前幾部（V0.6.11 數量控制）."""
         w, a = self.conv_where(exts, smin, smax, folders, (0, 4, 5), kind)
-        ids = [int(r[0]) for r in self.db.q(f'SELECT id FROM files WHERE {w} ORDER BY {self.CONV_SORT.get(sort, "size DESC")}', a)]
-        n = self.conv_add(ids); self.log.w(f'轉檔：照範圍加入 {n} 部（類型 {exts or "全部"}、大小 {smin or 0}～{smax or "不限"} MB、資料夾 {folders or "全部"}、排序 {sort}）'); return n
+        lim = int(limit or 0)
+        ids = [int(r[0]) for r in self.db.q(f'SELECT id FROM files WHERE {w} ORDER BY {self.CONV_SORT.get(sort, "size DESC")}' + (' LIMIT ?' if lim > 0 else ''), (*a, lim) if lim > 0 else a)]
+        n = self.conv_add(ids); self.log.w(f'轉檔：照範圍加入 {n} 部（類型 {exts or "全部"}、大小 {smin or 0}～{smax or "不限"} MB、資料夾 {folders or "全部"}、排序 {sort}' + (f'、只取前 {lim} 部' if lim > 0 else '') + '）'); return n
+
+    def conv_plan(self, exts=None, smin=0, smax=0, folders=None, sort='size_desc', kind='nonmp4', n=0, target_gb=0):
+        """V0.6.11 📏 數量／目標：範圍內最大最小檔、前 n 部的大小區間和預估省；給目標（GB）就算出要轉幾部.
+        預估省：有📈同類經驗用同類的比例，沒有用全部平均（跟清單上的「預估省」一樣）."""
+        w, a = self.conv_where(exts, smin, smax, folders, (0, 4, 5), kind)
+        rows = self.db.q(f'SELECT id,size,ext,vcodec,w,h,fps,vbr,dur,field,acodecs FROM files WHERE {w} ORDER BY {self.CONV_SORT.get(sort, "size DESC")}', a)
+        RM = self.learn_ratio_map(); gr = self.conv_ratio(); g_ = gr[0] if gr[1] else 0.5
+        sz = []; sv = []
+        for r in rows:
+            try: c_ = self.tq_class(dict(r)) if RM else ''
+            except Exception: c_ = ''
+            x = RM.get(c_); er = min(1.0, x[0] if x else g_); b = int(r['size'] or 0)
+            sz.append(b); sv.append(int(b * (1 - er)))
+        N = len(sz); tot_b = sum(sz); tot_s = sum(sv)
+        out = {'ok': True, 'n_all': N, 'bytes_all': tot_b, 'save_all': tot_s, 'min_all': min(sz) if sz else 0, 'max_all': max(sz) if sz else 0, 'ratio': g_}
+        tgt = int(float(target_gb or 0) * 1e9); auto = False
+        if tgt > 0:                                                              # 照目標算要幾部（照目前的排序一部一部加，加到夠為止）
+            acc = 0; k = 0
+            for k, v in enumerate(sv, 1):
+                acc += v
+                if acc >= tgt: break
+            n = k if N else 0; auto = True; out['reach'] = acc >= tgt
+        n = max(0, min(N, int(n or 0))) or N
+        S = sz[:n]
+        out.update(n=n, auto=auto, sel_bytes=sum(S), sel_save=sum(sv[:n]), sel_min=min(S) if S else 0, sel_max=max(S) if S else 0, target_gb=float(target_gb or 0))
+        return out
 
     def conv_reorder(self, sort='size_desc'):
         """排隊中的重新排順序（正在轉的不動）."""

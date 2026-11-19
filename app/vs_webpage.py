@@ -1240,7 +1240,7 @@ async function tHealth(){$('#tb').innerHTML='<div class="empty">檢查中…</di
   $('#tb').innerHTML=Object.values(H).map(h=>`<div class="panel"><b>${esc(h.name)}（${h.n}）</b><div class="list">${h.rows.slice(0,30).map(x=>`<div class="it" onclick="openFile(${x.id})"><div class="grow">${esc(x.name)}<div class="mu">${fmtB(x.size)} · ${esc((x.th_err||x.probe_err||'').slice(0,80))}</div></div></div>`).join('')||'<div class="mu">沒有 👍</div>'}</div></div>`).join('')}
 const CVK=[['nonmp4','非 MP4 → MP4'],['h264','H.264 → H.265'],['all','兩種都要'],['vs','🏷 已轉過 _VS']];
 const CVS=[['smart','💡 最省空間優先'],['size_desc','大 → 小'],['size_asc','小 → 大'],['name','檔名'],['folder','資料夾'],['dur_desc','長度'],['mtime_desc','最新']];
-const CV=Object.assign({tab:'pick',kind:'nonmp4',sort:'smart',exts:[],smin:0,smax:0,folder:'',df:'all'},LS.get('cv',{}));if(!Array.isArray(CV.fds))CV.fds=CV.folder?[CV.folder]:[];delete CV.folder;
+const CV=Object.assign({tab:'pick',kind:'nonmp4',sort:'size_desc',exts:[],smin:0,smax:0,folder:'',df:'all',n:0,t:0},LS.get('cv',{}));if(!CV.v611){CV.v611=1;CV.sort='size_desc'}if(!Array.isArray(CV.fds))CV.fds=CV.folder?[CV.folder]:[];delete CV.folder;
 async function chooseFolders(title,cur,done){const j=S.folders||await api('/api/folders');S.folders=j;const roots=j.roots||[];const P=new Set();(j.folders||[]).forEach(f=>{let p=f.path;const r=roots.find(x=>p.toLowerCase().startsWith(x.toLowerCase().replace(/[\\/]+$/,'')));
     while(r&&p.length>r.replace(/[\\/]+$/,'').length){P.add(p);const q=p.replace(/[\\/][^\\/]*$/,'');if(q===p)break;p=q}});
   const ALL=[...roots.map(r=>[r,1]),...[...P].filter(p=>!roots.some(r=>r.replace(/[\\/]+$/,'')===p)).sort((a,b)=>a.localeCompare(b)).map(p=>[p,0])];const SEL=new Set(cur);const d=document.createElement('div');d.className='sheet';
@@ -1264,7 +1264,28 @@ async function cvPick(){const b=$('#cvb');if(!b)return;
    <div class="fr"><b>大小</b><input id="cvmin" type="number" inputmode="numeric" placeholder="最小 MB" value="${CV.smin||''}" style="width:30%"><span>～</span><input id="cvmax" type="number" inputmode="numeric" placeholder="最大 MB" value="${CV.smax||''}" style="width:30%"></div>
    <div class="fr"><b>資料夾</b><div class="extg" id="cvfds">${CV.fds.map((f,i)=>`<button class="pill on" data-fdx="${i}" title="${esc(f)}">📁 ${esc(f.split(/[\\/]/).filter(Boolean).pop()||f)} ✕</button>`).join('')||'<span class="mu" style="align-self:center">全部範圍</span>'}<button class="pill" id="cvfd">＋ 資料夾</button></div></div>
    <div class="fr"><b>類型</b><div class="extg" id="cvx"><span class="mu">讀取中…</span></div></div>
+   <div class="mu" id="cvszh" style="margin:-2px 0 6px 64px"></div>
+   <div class="panel"><b>📏 數量與目標</b> <span class="mu">（照排序從第一部開始取）</span>
+    <div class="fr" style="margin-top:6px"><b>數量</b><button class="pill" id="cvnm">－</button><input id="cvn" type="number" inputmode="numeric" min="0" placeholder="全部" value="${CV.n||''}" style="width:28%"><button class="pill" id="cvnp">＋</button><button class="pill" id="cvna">全部</button></div>
+    <input id="cvsl" type="range" min="0" max="1" value="0" style="width:100%">
+    <div class="fr"><b>目標省</b><input id="cvt" type="number" inputmode="numeric" min="0" placeholder="不設" value="${CV.t||''}" style="width:34%"><span>GB</span><span class="mu" id="cvtt"></span></div>
+    <div id="cvpi" class="mu" style="margin-top:4px">計算中…</div></div>
    <div class="panel"><div id="cvsum" class="mu">讀取中…</div><button class="pill acc" id="cvgo" style="width:100%;margin-top:8px;padding:10px" disabled>▶ 範圍內全部加入轉檔</button></div><div class="panel list" id="cvl"></div>`;
+  let CVP=null,cvT=0;
+  const cvPlan=async()=>{const pq={a:'plan',kind:CV.kind,sort:CV.sort,exts:CV.exts.join(','),smin:CV.smin||0,smax:CV.smax||0,folders:CV.fds.join('|'),n:CV.n||0,t:CV.t||0};
+    const P=await api(U('/api/conv2',pq));if(!P.ok||!$('#cvpi'))return;CVP=P;const N=P.n_all||0;
+    $('#cvszh').textContent=N?`範圍內：最小 ${fmtB(P.min_all)}、最大 ${fmtB(P.max_all)}`:'';
+    $('#cvsl').max=Math.max(1,N);if(P.auto){CV.n=P.n;$('#cvn').value=P.n;LS.set('cv',CV)}$('#cvsl').value=CV.n||Math.max(1,N);
+    $('#cvtt').textContent=CV.t>=1000?`＝${(CV.t/1000).toFixed(2)} TB`:'';
+    let h=N?`前 <b>${P.n.toLocaleString()}</b> 部（共 ${N.toLocaleString()}）：大小 <b>${fmtB(P.sel_max)}～${fmtB(P.sel_min)}</b>・合計 ${fmtB(P.sel_bytes)} → 預估省 <b style="color:var(--green)">${fmtB(P.sel_save)}</b>`:'範圍內沒有可以轉的檔';
+    if(CV.t&&N)h+=P.reach?`<br>🎯 目標省 ${fmtB(CV.t*1e9)}：大約要轉 <b>${P.n.toLocaleString()}</b> 部（已自動帶入，範圍改了會重算）`:`<br><span style="color:var(--orange)">🎯 範圍內全部轉完也只能省大約 ${fmtB(P.save_all)}</span>`;
+    if(N)h+=`<br>全部 ${N.toLocaleString()} 部轉完預估省 ${fmtB(P.save_all)}`;$('#cvpi').innerHTML=h;
+    $('#cvgo').textContent=N&&P.n<N?`▶ 加入前 ${P.n.toLocaleString()} 部轉檔`:'▶ 範圍內全部加入轉檔'};
+  const setN=(v,keepT)=>{CV.n=Math.max(0,Math.round(+v||0));if(!keepT){CV.t=0;$('#cvt').value=''}$('#cvn').value=CV.n||'';LS.set('cv',CV);clearTimeout(cvT);cvT=setTimeout(cvPlan,250)};
+  $('#cvn').onchange=e=>setN(e.target.value);$('#cvsl').oninput=e=>{$('#cvn').value=e.target.value};$('#cvsl').onchange=e=>setN(e.target.value);
+  $('#cvnm').onclick=()=>setN(Math.max(0,(CV.n||(CVP?CVP.n_all:0))-50));$('#cvnp').onclick=()=>setN((CV.n||0)+50);$('#cvna').onclick=()=>setN(0);
+  $('#cvt').onchange=e=>{CV.t=Math.max(0,+e.target.value||0);LS.set('cv',CV);cvPlan()};
+  cvPlan();
   $('#cvk').onclick=e=>{const x=e.target.closest('button');if(!x)return;CV.kind=x.dataset.k;CV.exts=[];LS.set('cv',CV);cvPick()};
   $('#cvs').onchange=e=>{CV.sort=e.target.value;LS.set('cv',CV);cvPick()};
   const num=()=>{CV.smin=+$('#cvmin').value||0;CV.smax=+$('#cvmax').value||0;LS.set('cv',CV);cvPick()};$('#cvmin').onchange=num;$('#cvmax').onchange=num;
@@ -1275,8 +1296,9 @@ async function cvPick(){const b=$('#cvb');if(!b)return;
   $('#cvx').innerHTML=(j.exts||[]).map(([e,n,bz])=>`<button class="pill ${CV.exts.includes(e)?'on':''}" data-e="${e}">${CV.exts.includes(e)?'✔ ':''}${e.slice(1)} ${n}</button>`).join('')||'<span class="mu">沒有</span>';
   $('#cvx').onclick=e=>{const x=e.target.closest('[data-e]');if(!x)return;const k=x.dataset.e;CV.exts=CV.exts.includes(k)?CV.exts.filter(z=>z!==k):[...CV.exts,k];LS.set('cv',CV);cvPick()};
   $('#cvsum').innerHTML=`範圍內 <b>${j.n.toLocaleString()}</b> 部 · ${fmtB(j.bytes)} · 轉完預估省 <b style="color:var(--green)">${fmtB(j.est_save!=null?j.est_save:j.bytes*(1-ratio))}</b>${j.est_hit?`（${j.est_hit} 部照📈同類經驗估）`:''}${j.ratio&&j.ratio[1]?`（其他照已轉好的平均 ${Math.round(ratio*100)}%）`:'（先用 50% 估）'}${j.vs_n?`<div style="color:var(--orange);margin-top:4px">🏷 另外 ${j.vs_n.toLocaleString()} 部檔名有 _VS（已轉過）沒列；真的要再轉，上面選「🏷 已轉過 _VS」</div>`:''}`;
-  if(j.why)$('#cvsum').innerHTML+=`<div style="color:#ff9f43;margin-top:4px">ℹ ${esc(j.why)}</div>`;$('#cvgo').disabled=!j.n;$('#cvgo').onclick=async()=>{if(!confirm(`把範圍內 ${j.n.toLocaleString()} 部照「${(CVS.find(x=>x[0]===CV.sort)||['',''])[1]}」加入轉檔？\n轉成 H.265 MP4 放在原本的資料夾；原檔先搬到該硬碟最外層的 DELETE；預覽圖、分級都沿用。`))return;
-    const r=await api('/api/conv2',{a:'add_filtered',kind:CV.kind,sort:CV.sort,exts:CV.exts,smin:CV.smin,smax:CV.smax,folders:CV.fds});toast(r.message||'');CV.tab='run';tConv()};
+  if(j.why)$('#cvsum').innerHTML+=`<div style="color:#ff9f43;margin-top:4px">ℹ ${esc(j.why)}</div>`;$('#cvgo').disabled=!j.n;$('#cvgo').onclick=async()=>{const lim0=CVP&&CVP.n_all&&CVP.n<CVP.n_all?CVP.n:0;if(!confirm(`把範圍內${lim0?'前 '+lim0.toLocaleString():' '+j.n.toLocaleString()} 部照「${(CVS.find(x=>x[0]===CV.sort)||['',''])[1]}」加入轉檔？\n轉成 H.265 MP4 放在原本的資料夾；原檔先搬到該硬碟最外層的 DELETE；預覽圖、分級都沿用。`))return;
+    const lim=CVP&&CVP.n_all&&CVP.n<CVP.n_all?CVP.n:0;
+    const r=await api('/api/conv2',{a:'add_filtered',kind:CV.kind,sort:CV.sort,exts:CV.exts,smin:CV.smin,smax:CV.smax,folders:CV.fds,limit:lim});toast(r.message||'');CV.tab='run';tConv()};
   $('#cvl').innerHTML=(j.rows||[]).map(r=>`<div class="it" data-id="${r.id}"><div class="grow"><div style="word-break:break-all">${esc(r.name)}</div><div class="mu">${esc(r.ext.slice(1))} · ${esc(r.vcodec||'?')} · ${r.w?r.w+'×'+r.h:''} · ${r.dur?fmtT(r.dur):'—'} · ${fmtB(r.size)} · 預估省 <span style="color:var(--green)">${fmtB(r.size*(1-(r.est_ratio!=null?r.est_ratio:ratio)))}</span>${r.cv_state==4?' · <span style="color:var(--red)">上次失敗</span>':''}</div></div><button class="pill" data-add="${r.id}">＋</button></div>`).join('')+(j.n>(j.rows||[]).length?`<div class="mu" style="padding:8px">只列前 ${(j.rows||[]).length} 部</div>`:'')||'<div class="empty">範圍內沒有要轉的 👍</div>';
   $('#cvl').onclick=async e=>{const a=e.target.closest('[data-add]');if(a){const r=await api('/api/conv2',{a:'add',ids:[+a.dataset.add]});toast(r.message||'');a.textContent='✔';a.disabled=true;return}const it=e.target.closest('.it[data-id]');if(it)openFile(+it.dataset.id)}}
 async function cvRun(){const b=$('#cvb');if(!b)return;const j=await api(U('/api/conv2',{a:'queue'}));if(!j.ok||!$('#cvb'))return;

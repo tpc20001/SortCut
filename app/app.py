@@ -10,10 +10,10 @@ from PySide6.QtCore import Qt, QTimer, QObject, Signal, Slot, QRect, QRectF, QPo
 from PySide6.QtGui import (QPainter, QColor, QPixmap, QImage, QIcon, QFont, QPen, QAction, QKeySequence, QShortcut, QDesktopServices, QPainterPath, QCursor, QFontMetrics, QLinearGradient, QRadialGradient, QWindow)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QListWidget, QListWidgetItem,
                                QTreeWidget, QTreeWidgetItem, QSplitter, QStackedWidget, QScrollArea, QComboBox, QSpinBox, QCheckBox, QLineEdit, QFileDialog,
-                               QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QMenu,
+                               QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.10'
+APP_VERSION = '0.6.11'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -3275,9 +3275,20 @@ class ConvPage(QWidget):
         self.smin = QSpinBox(); self.smax = QSpinBox()
         for sp in (self.smin, self.smax): sp.setRange(0, 999999); sp.setSuffix(' MB'); sp.setSpecialValueText('不限')
         gl.addWidget(QLabel('大小'), 1, 0); gl.addWidget(self.smin, 1, 1); gl.addWidget(QLabel('～'), 1, 2); gl.addWidget(self.smax, 1, 3)
+        self.sz_hint = QLabel(''); self.sz_hint.setObjectName('muted'); gl.addWidget(self.sz_hint, 1, 4)          # V0.6.11 範圍內最大／最小檔
         self.fd_list = QListWidget(); self.fd_list.setMaximumHeight(64); self.b_fd = QPushButton('＋ 加資料夾…'); self.b_fd_tree = QPushButton('＋ 檔案總管目前的資料夾'); self.b_fd_rm = QPushButton('拿掉選的')
         gl.addWidget(QLabel('資料夾（含子資料夾）'), 2, 0); gl.addWidget(self.fd_list, 2, 1, 1, 3)
         fb = QVBoxLayout(); fb.addWidget(self.b_fd); fb.addWidget(self.b_fd_tree); fb.addWidget(self.b_fd_rm); gl.addLayout(fb, 2, 4)
+        gq = QGroupBox('📏 數量與目標（照上面的排序，從第一部開始取）'); ql = QGridLayout(gq); v.addWidget(gq)   # V0.6.11
+        self.q_n = QSpinBox(); self.q_n.setRange(0, 999999); self.q_n.setSuffix(' 部'); self.q_n.setSpecialValueText('全部'); self.q_n.setSingleStep(50)
+        self.q_sl = QSlider(Qt.Horizontal); self.q_sl.setRange(0, 1)
+        self.q_all = QPushButton('全部')
+        ql.addWidget(QLabel('數量'), 0, 0); ql.addWidget(self.q_n, 0, 1); ql.addWidget(self.q_sl, 0, 2); ql.addWidget(self.q_all, 0, 3)
+        self.q_t = QDoubleSpinBox(); self.q_t.setRange(0, 999999); self.q_t.setDecimals(0); self.q_t.setSingleStep(50); self.q_t.setSuffix(' GB'); self.q_t.setSpecialValueText('不設')
+        self.q_t.setToolTip('想省多少空間：設了之後「數量」會自動算（範圍、類型、排序變了也會跟著重算）；自己改數量就變回手動')
+        self.q_tt = QLabel(''); self.q_tt.setObjectName('muted')
+        ql.addWidget(QLabel('目標省'), 1, 0); ql.addWidget(self.q_t, 1, 1); ql.addWidget(self.q_tt, 1, 2, 1, 2)
+        self.q_info = QLabel(''); self.q_info.setWordWrap(True); self.q_info.setTextFormat(Qt.RichText); ql.addWidget(self.q_info, 2, 0, 1, 4)
         self.cnt = shrinkable(QLabel(''), True); self.cnt.setObjectName('muted'); v.addWidget(self.cnt)
         self.b_ref = QPushButton('🔄 重新整理'); self.b_add_sel = QPushButton('加入選取的'); self.b_add_all = QPushButton('▶ 範圍內全部加入轉檔'); self.b_add_all.setObjectName('start')
         v.addWidget(flow_row([self.b_ref, self.b_add_sel, self.b_add_all]))
@@ -3295,7 +3306,56 @@ class ConvPage(QWidget):
         for sp in (self.smin, self.smax): sp.editingFinished.connect(lambda: (self._save_range(), self.load()))
         self.b_fd.clicked.connect(self.pick_dir); self.b_fd_tree.clicked.connect(self._fd_from_tree); self.b_fd_rm.clicked.connect(self._fd_rm)
         self.b_ref.clicked.connect(self.load); self.b_add_all.clicked.connect(self.go_all); self.b_add_sel.clicked.connect(self.go)
+        self.q_n.setValue(int(ENG.cfg.get('cv_n') or 0)); self.q_t.setValue(float(ENG.cfg.get('cv_target_gb') or 0)); self.plan = None; self._qbusy = False
+        self.q_dt = QTimer(self); self.q_dt.setSingleShot(True); self.q_dt.timeout.connect(self._plan_load)
+        self.q_n.valueChanged.connect(lambda v_: self._q_set_n(v_)); self.q_sl.valueChanged.connect(lambda v_: self._q_set_n(v_, True))
+        self.q_all.clicked.connect(lambda: (self.q_t.setValue(0), self.q_n.setValue(0)))
+        self.q_t.valueChanged.connect(self._q_set_t)
+        if not ENG.cfg.get('v0611_sort'):                                          # V0.6.11 使用者要「從最大的開始轉」：預設改成大 → 小，排隊中的也照大小重排一次
+            ENG.cfg.set('v0611_sort', 1); ENG.cfg.set('cv_sort', 'size_desc'); i_ = self.sort.findData('size_desc'); self.sort.blockSignals(True); self.sort.setCurrentIndex(max(0, i_)); self.sort.blockSignals(False)
+            bg(lambda: ENG.conv_reorder('size_desc'), lambda n_: None)
         return w
+
+    # ---------- 📏 數量與目標（V0.6.11）
+    def _q_set_n(self, v_, from_slider=False):
+        if self._qbusy: return
+        self._qbusy = True
+        try:
+            if from_slider: self.q_n.setValue(int(v_))
+            else: self.q_sl.setValue(int(v_) or self.q_sl.maximum())
+            if self.q_t.value(): self.q_t.setValue(0)                            # 自己改數量 → 目標變手動
+        finally: self._qbusy = False
+        ENG.cfg.set('cv_n', int(self.q_n.value())); ENG.cfg.set('cv_target_gb', float(self.q_t.value())); self.q_dt.start(250)
+
+    def _q_set_t(self, v_):
+        if self._qbusy: return
+        ENG.cfg.set('cv_target_gb', float(v_)); self.q_tt.setText(f'＝{v_ / 1000:.2f} TB' if v_ >= 1000 else ''); self.q_dt.start(250)
+
+    def _plan_args(self):
+        R = self._range(); return (R['exts'], R['smin'], R['smax'], R['folders'], self.sort.currentData() or 'size_desc', self.kind, int(self.q_n.value()), float(self.q_t.value()))
+
+    def _plan_load(self):
+        A_ = self._plan_args(); bg(lambda: ENG.conv_plan(*A_), self._plan_show)
+
+    def _plan_show(self, P):
+        self.plan = P; N = int(P.get('n_all') or 0)
+        self.sz_hint.setText(f"範圍內：最小 {fmt_b(P['min_all'])}、最大 {fmt_b(P['max_all'])}" if N else '範圍內沒有檔')
+        self._qbusy = True
+        try:
+            self.q_sl.setRange(0, max(1, N))
+            if P.get('auto'): self.q_n.setValue(int(P['n']))                    # 照目標自動帶入數量（浮動）
+            self.q_sl.setValue(int(self.q_n.value()) or max(1, N))
+        finally: self._qbusy = False
+        if P.get('auto'): ENG.cfg.set('cv_n', int(P['n']))
+        n = int(P.get('n') or 0); t_ = float(P.get('target_gb') or 0)
+        h = (f"前 <b>{n:,}</b> 部（共 {N:,} 部）：大小 <b>{fmt_b(P['sel_max'])} ～ {fmt_b(P['sel_min'])}</b>・合計 {fmt_b(P['sel_bytes'])} → 預估省 <b style='color:#45d483'>{fmt_b(P['sel_save'])}</b>"
+             if N else '範圍內沒有可以轉的檔')
+        if t_ and N:
+            h += (f"<br>🎯 目標省 {fmt_b(t_ * 1e9)}：大約要轉 <b>{n:,}</b> 部（已自動帶入數量，範圍改了會跟著重算）" if P.get('reach') else
+                  f"<br><span style='color:#f0ad4e'>🎯 目標省 {fmt_b(t_ * 1e9)}：範圍內全部轉完也只能省大約 {fmt_b(P['save_all'])}（放寬大小、類型、資料夾試試）</span>")
+        if N: h += f"<br><span style='color:#8994a4'>全部 {N:,} 部轉完預估省 {fmt_b(P['save_all'])}</span>"
+        self.q_info.setText(h)
+        self.b_add_all.setText(f'▶ 加入前 {n:,} 部轉檔' if N and n < N else '▶ 範圍內全部加入轉檔')
 
     def _kind(self, k):
         self.kind = k; ENG.cfg.set('cv_kind', k)
@@ -3336,8 +3396,11 @@ class ConvPage(QWidget):
             ex = {}
             w_, a_ = ENG.conv_where(None, R['smin'], R['smax'], R['folders'], (0, 4, 5), k)
             for e, n, b in ENG.db.q(f'SELECT ext, COUNT(*), SUM(size) FROM files WHERE {w_} GROUP BY ext ORDER BY 3 DESC', a_): ex[e] = (n, b or 0)
-            c['exts'] = ex; c['ratio'] = ENG.conv_ratio(); return c
-        bg(work, self._loaded)
+            c['exts'] = ex; c['ratio'] = ENG.conv_ratio()
+            try: c['plan'] = ENG.conv_plan(*A_)
+            except Exception: c['plan'] = None
+            return c
+        A_ = self._plan_args(); bg(work, self._loaded)
 
     def _loaded(self, c):
         self.rows = c['rows']; self.vis = self.rows; self.ratio = c.get('ratio') or (0.5, 0); ratio = self.ratio[0] if self.ratio[1] else 0.5
@@ -3360,6 +3423,7 @@ class ConvPage(QWidget):
                          (f"（{c.get('est_hit', 0):,} 部照📈同類經驗估，其他照已轉好的 {self.ratio[1]} 部平均 {ratio * 100:.0f}%）" if self.ratio[1] else '（還沒轉過，先用 50% 估）') + (f'　清單只列前 {len(R):,} 部' if c['n'] > len(R) else '') +
                          (f"<br><span style='color:#f0ad4e'>🏷 另外有 {c['vs_n']:,} 部檔名有 _VS（已經轉過），沒有列在這裡；真的要再轉，種類選「🏷 已轉過的」</span>" if c.get('vs_n') else '') + (f"<br><span style='color:#ff9f43'>ℹ {c['why']}</span>" if c.get('why') else ''))
         self.cnt.setTextFormat(Qt.RichText)
+        if c.get('plan'): self._plan_show(c['plan'])
 
     def _ext_tog(self, e, on):
         (self._ext_sel.add if on else self._ext_sel.discard)(e); self._save_range(); self.load()
@@ -3389,9 +3453,10 @@ class ConvPage(QWidget):
 
     def go_all(self):
         R = self._range(); k = self.kind; srt = self.sort.currentData() or 'smart'
-        n = len(self.rows); after = {'delete_dir': '原檔先搬到該硬碟最外層的 DELETE 資料夾（抽檢沒問題再刪）', 'keep': '原檔留著不動', 'orig': '原檔搬到 VideoSIFT\\原檔備份', 'recycle': '原檔丟資源回收筒'}.get(ENG.cfg.get('cv_after') or 'delete_dir', '')
-        if QMessageBox.question(self, '加入轉檔', f'把範圍內的影片（目前列出 {n:,} 部）照「{self.sort.currentText()}」的順序加入轉檔？\n\n轉成 H.265 MP4，放在原本的資料夾；預覽圖、分級、人物都沿用。\n轉好後：{after}\n每部轉好會自動檢查長度和畫質。') != QMessageBox.Yes: return
-        bg(lambda: ENG.conv_add_filtered(R['exts'], R['smin'], R['smax'], R['folders'], srt, k), lambda n_: (self.win.msg(f'已排入 {n_:,} 部（到「⚙ 轉檔中」看進度）'), self.load(), self.tabs.setCurrentIndex(1)))
+        P_ = self.plan or {}; lim = int(P_.get('n') or 0) if P_.get('n_all') and int(P_.get('n') or 0) < int(P_.get('n_all') or 0) else 0
+        n = lim or int(P_.get('n_all') or len(self.rows)); after = {'delete_dir': '原檔先搬到該硬碟最外層的 DELETE 資料夾（抽檢沒問題再刪）', 'keep': '原檔留著不動', 'orig': '原檔搬到 VideoSIFT\\原檔備份', 'recycle': '原檔丟資源回收筒'}.get(ENG.cfg.get('cv_after') or 'delete_dir', '')
+        if QMessageBox.question(self, '加入轉檔', (f'把範圍內前 {n:,} 部（最大的先）' if lim else f'把範圍內的影片（{n:,} 部）') + f'照「{self.sort.currentText()}」的順序加入轉檔？\n\n轉成 H.265 MP4，放在原本的資料夾；預覽圖、分級、人物都沿用。\n轉好後：{after}\n每部轉好會自動檢查長度和畫質。') != QMessageBox.Yes: return
+        bg(lambda: ENG.conv_add_filtered(R['exts'], R['smin'], R['smax'], R['folders'], srt, k, lim), lambda n_: (self.win.msg(f'已排入 {n_:,} 部（到「⚙ 轉檔中」看進度）'), self.load(), self.tabs.setCurrentIndex(1)))
 
     def _menu(self, pos):
         R = self._sel_rows(self.tb, self.vis)
