@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.13'
+APP_VERSION = '0.6.14'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -3797,6 +3797,8 @@ class ConvPage(QWidget):
         self.D = D; self.done_all = D['rows']
         self.dsum.setText(f"完成 <b>{D['n']:,}</b> 部：轉檔前 {fmt_b(D['osz'])} → 轉檔後 {fmt_b(D['nsz'])}，省下 <b style='color:#45d483'>{fmt_b(max(0, D['osz'] - D['nsz']))}</b>" +
                           (f"（{D['nsz'] * 100 / D['osz']:.0f}%）" if D['osz'] else '') + (f"　｜　DELETE 裡還有 <b style='color:#f0ad4e'>{D['pending']:,}</b> 個原檔、{fmt_b(D['pending_bytes'])} 等你抽檢後刪除" + ('（' + '、'.join(f'{k}\\DELETE {v[0]:,} 個・{fmt_b(v[1])}' for k, v in (D.get('pending_by') or {}).items()) + '）' if D.get('pending_by') else '') if D['pending'] else '　｜　DELETE 裡沒有等著刪的原檔') +
+                          (lambda T_, S_: f"<br>📅 今天轉好 <b>{T_['n']:,}</b> 部，省下 <b style='color:#45d483'>{fmt_b(T_['save'])}</b>"
+                           + f"　｜　🔁 這次（{time.strftime('%m-%d %H:%M', time.localtime(S_['t0']))} 打開後）轉好 <b>{S_['n']:,}</b> 部，省下 <b style='color:#45d483'>{fmt_b(S_['save'])}</b>")(D.get('today') or {'n': 0, 'save': 0}, D.get('session') or {'n': 0, 'save': 0, 't0': time.time()}) +
                           (f"<br><span style='color:#f0ad4e'>💤 {'、'.join(D.get('offline_drives') or [])} 硬碟離線：{D.get('offline_n', 0):,} 部暫時讀不到（檔案沒有刪），接回來就恢復</span>" if D.get('offline_n') else ''))
         self.b_pall.setText(f"🗑 刪除已轉檔完成的原檔（{D['pending']:,} 個・{fmt_b(D['pending_bytes'])}）" if D['pending'] else '🗑 刪除已轉檔完成的原檔'); self.b_pall.setEnabled(bool(D['pending']))
         self.b_bigall.setText(f"↩ 變大的全部還原（{D.get('big', 0)} 部・多佔 {fmt_b(D.get('big_bytes', 0))}）" if D.get('big') else '↩ 變大的全部還原'); self.b_bigall.setEnabled(bool(D.get('big')))

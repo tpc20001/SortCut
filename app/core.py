@@ -5518,8 +5518,13 @@ class Engine:
             r['out_exists'] = os.path.exists(r['path']); r['big'] = bool(r['osz']) and r['nsz'] >= r['osz'] * 0.98
             r['orig'] = r['cv_del'] if r['del_exists'] else (r['cv_src'] if r['src_exists'] else '')       # 比較用：原檔現在在哪
         sm = self.db.one("SELECT COUNT(*), SUM(cv_osz), SUM(cv_nsz) FROM files WHERE cv_state=3 AND cv_osz>0")
+        def win_(t0):                                                           # V0.6.14 今天／這次開程式後 省了多少
+            x = self.db.one("SELECT COUNT(*), SUM(cv_osz), SUM(cv_nsz) FROM files WHERE cv_state=3 AND cv_osz>0 AND cv_t>=?", (float(t0),))
+            return {'n': int(x[0] or 0), 'osz': int(x[1] or 0), 'nsz': int(x[2] or 0), 'save': max(0, int(x[1] or 0) - int(x[2] or 0)), 't0': float(t0)}
+        lt = time.localtime(); today0 = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+        if not getattr(sys, '_vs_boot_t', None): sys._vs_boot_t = time.time()  # 程式這次打開的時間（熱更新不重算）
         pend = [r for r in rows if r['del_exists'] and not r['big']]; big = [r for r in rows if r['big'] and r['orig']]
-        return {'rows': rows, 'n': int(sm[0] or 0), 'osz': int(sm[1] or 0), 'nsz': int(sm[2] or 0), 'pending': len(pend), 'pending_bytes': sum(r['osz'] for r in pend),
+        return {'rows': rows, 'n': int(sm[0] or 0), 'osz': int(sm[1] or 0), 'nsz': int(sm[2] or 0), 'today': win_(today0), 'session': win_(sys._vs_boot_t), 'pending': len(pend), 'pending_bytes': sum(r['osz'] for r in pend),
                 'big': len(big), 'big_bytes': sum(r['nsz'] - r['osz'] for r in big),
                 'offline_n': sum(1 for r in rows if r['offline']), 'offline_drives': sorted(k for k, v in up.items() if not v),
                 'pending_by': {k: [sum(1 for r in pend if os.path.splitdrive(str(r['cv_del']))[0].upper() == k), sum(r['osz'] for r in pend if os.path.splitdrive(str(r['cv_del']))[0].upper() == k)]

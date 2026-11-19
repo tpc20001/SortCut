@@ -1314,7 +1314,9 @@ async function cvRun(){const b=$('#cvb');if(!b)return;const j=await api(U('/api/
 const CVDS=[['t_desc','最新轉好'],['save_desc','省最多'],['size_desc','原檔大 → 小'],['name','檔名']];const CVSEL=new Set();
 async function cvDone(){const b=$('#cvb');if(!b)return;const D=await api(U('/api/conv2',{a:'done',q:CV.dq||'',sort:CV.dsort||'t_desc'}));if(!D.ok||!$('#cvb'))return;
   let L=D.rows||[];const F={all:r=>1,pend:r=>r.del_exists,warn:r=>!r.cv_ssim||r.cv_ssim<0.95,unseen:r=>!(r.viewed&&r.viewed>=(r.cv_t||0))};L=L.filter(F[CV.df]||F.all);
-  b.innerHTML=`<div class="panel"><div>完成 <b>${D.n.toLocaleString()}</b> 部：${fmtB(D.osz)} → ${fmtB(D.nsz)}，省下 <b style="color:var(--green)">${fmtB(Math.max(0,D.osz-D.nsz))}</b></div>
+  const T_=D.today||{n:0,save:0},S_=D.session||{n:0,save:0,t0:Date.now()/1000};
+  b.innerHTML=`<div class="panel"><div>📅 今天轉好 <b>${T_.n.toLocaleString()}</b> 部，省下 <b style="color:var(--green)">${fmtB(T_.save)}</b>　🔁 這次（${new Date(S_.t0*1000).toLocaleString([],{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} 打開後）<b>${S_.n.toLocaleString()}</b> 部，省下 <b style="color:var(--green)">${fmtB(S_.save)}</b></div>
+   <div class="mu">全部：完成 <b>${D.n.toLocaleString()}</b> 部：${fmtB(D.osz)} → ${fmtB(D.nsz)}，省下 ${fmtB(Math.max(0,D.osz-D.nsz))}</div>
    ${D.offline_n?`<div class="mu" style="color:var(--orange);margin:4px 0">💤 ${(D.offline_drives||[]).map(esc).join('、')} 硬碟離線：${D.offline_n} 部暫時讀不到（檔案沒有刪），接回來就恢復</div>`:''}
    <div class="mu">${D.pending?`DELETE 裡還有 <b style="color:var(--orange)">${D.pending}</b> 個原檔、${fmtB(D.pending_bytes)} ${D.pending_by&&Object.keys(D.pending_by).length?'（'+Object.entries(D.pending_by).map(([k,v])=>esc(k)+'\\DELETE '+v[0]+' 個・'+fmtB(v[1])).join('、')+'）':''}等你抽檢後刪除`:'DELETE 裡沒有等著刪的原檔'}</div>
    ${D.big?`<div style="color:var(--red);margin-top:6px">⚠ 有 <b>${D.big}</b> 部轉完反而變大（多佔 ${fmtB(D.big_bytes)}）：按「↩ 變大的還原」刪掉轉大的、原檔搬回原位</div>`:''}
