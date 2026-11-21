@@ -1273,10 +1273,12 @@ function exMix(j,tot){const bar=(L,lab)=>`<div style="display:flex;height:22px;b
 async function tExplore(){const tb=$('#tb');if(!tb)return;
   const crumbs=()=>{if(!EX.p)return '<b>💽 全部影片庫</b>';const parts=EX.p.split('\\').filter(Boolean);let acc='',h=`<a href="#" data-exp="">💽</a>`;
     parts.forEach((x,i)=>{acc=i?acc+'\\'+x:x;h+=` › <a href="#" data-exp="${esc(acc)}">${esc(x)}</a>`});return h};
-  tb.innerHTML=`<input id="exq" class="ssearch" placeholder="🔍 找檔案（像 Everything：空白分開，每個字都要有）" value="${esc(EX.q)}" style="width:100%;margin:2px 0 6px">
+  tb.innerHTML=`<input id="exq" class="ssearch" placeholder="🔍 找檔案（空白分開；也可以 size:>1g ext:mkv codec:h264 dur:>30m cv:no）" value="${esc(EX.q)}" style="width:100%;margin:2px 0 4px">
+   <div class="chips" id="exch" style="margin:0 0 6px">${[['size:>1g','大於 1GB'],['size:>10g','大於 10GB'],['codec:h264','H.264'],['codec:hevc','H.265'],['ext:mkv,avi,wmv,mov,ts','非 MP4'],['dur:>60m','超過 1 小時'],['cv:no','還沒轉']].map(([t,n])=>`<button class="pill${EX.q.split(/\s+/).includes(t)?' on':''}" data-ext="${t}">${n}</button>`).join('')}</div>
    <div class="row" style="align-items:center;gap:6px;flex-wrap:wrap"><div id="excr" style="flex:1;min-width:0;word-break:break-all">${crumbs()}</div>
    <div class="seg" id="exs">${[['size','大小'],['n','檔數'],['save','可省'],['name','名稱']].map(([k,n])=>`<button data-k="${k}"${EX.sort===k?' class="on"':''}>${n}</button>`).join('')}</div></div>
    <div id="exb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;
+  $('#exch').onclick=e=>{const b=e.target.closest('[data-ext]');if(!b)return;const t=b.dataset.ext,L=EX.q.split(/\s+/).filter(Boolean);EX.q=(L.includes(t)?L.filter(x=>x!==t):[...L,t]).join(' ');exSave();tExplore()};
   let qt=0;$('#exq').oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{EX.q=e.target.value;exSave();draw()},300)};
   $('#exs').onclick=e=>{const b=e.target.closest('button');if(!b)return;EX.sort=b.dataset.k;exSave();$$('#exs button').forEach(x=>x.classList.toggle('on',x===b));draw()};
   $('#excr').onclick=e=>{const a=e.target.closest('[data-exp]');if(!a)return;e.preventDefault();EX.p=a.dataset.exp;EX.q='';$('#exq').value='';exSave();tExplore()};

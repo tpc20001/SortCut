@@ -5477,10 +5477,31 @@ class Engine:
 
     def explore_search(self, q, prefix='', sort='size', limit=500):
         """像 Everything：空白分開的每個字都要出現在完整路徑裡（不分大小寫）；可以限定在某個資料夾底下."""
-        toks = [t for t in str(q or '').lower().split() if t][:8]
-        if not toks: return {'ok': True, 'rows': [], 'more': False}
-        w = ['missing=0']; a = []
-        for t in toks: w.append("lower(path) LIKE ? ESCAPE '^'"); a.append('%' + self._like_esc(t) + '%')
+        toks = [t for t in str(q or '').lower().split() if t][:12]
+        w = ['missing=0']; a = []; flt = 0
+        def num(v):                                                              # 1.5g／500m／2t／800k → 位元組
+            m = re.match(r'^([\d.]+)\s*([kmgt]?)b?$', v)
+            if not m: return None
+            return float(m.group(1)) * {'': 1, 'k': 1024, 'm': 1024 ** 2, 'g': 1024 ** 3, 't': 1024 ** 4}[m.group(2)]
+        for t in toks:
+            k, _, v = t.partition(':')
+            if v and k in ('size', '大小'):                                       # V0.6.23 像 Everything：size:>1g、size:<500m
+                op = '>' if v[0] in '>' else '<' if v[0] == '<' else '>'
+                n = num(v.lstrip('<>=')); 
+                if n is not None: w.append(f'size {op}= ?'); a.append(int(n)); flt += 1; continue
+            if v and k in ('ext', '副檔名'):
+                E = ['.' + x.lstrip('.') for x in v.split(',') if x]
+                w.append('lower(ext) IN (' + ','.join('?' * len(E)) + ')'); a += E; flt += 1; continue
+            if v and k in ('codec', '編碼'):
+                C = {'h264': ['h264', 'avc'], 'h265': ['hevc', 'h265'], 'hevc': ['hevc', 'h265']}.get(v, [v])
+                w.append('lower(vcodec) IN (' + ','.join('?' * len(C)) + ')'); a += C; flt += 1; continue
+            if v and k in ('dur', '長度'):
+                op = '<' if v[0] == '<' else '>'; mm = re.match(r'^[<>=]*([\d.]+)\s*(h|m|s)?$', v)
+                if mm: w.append(f'dur {op}= ?'); a.append(float(mm.group(1)) * {'h': 3600, 'm': 60, 's': 1, None: 60}[mm.group(2)]); flt += 1; continue
+            if k in ('cv', '轉檔') and v in ('done', 'yes', '好了', '1'): w.append('cv_state=3'); flt += 1; continue
+            if k in ('cv', '轉檔') and v in ('no', 'not', '沒', '0'): w.append('cv_state<>3'); flt += 1; continue
+            w.append("lower(path) LIKE ? ESCAPE '^'"); a.append('%' + self._like_esc(t) + '%'); flt += 1
+        if not flt: return {'ok': True, 'rows': [], 'more': False, 'n': 0, 'sum': 0}
         prefix = str(prefix or '').rstrip('\\/')
         if prefix:
             eq = prefix + '\\' if prefix.endswith(':') else prefix

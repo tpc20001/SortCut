@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.22'
+APP_VERSION = '0.6.23'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6437,13 +6437,18 @@ class ExplorePage(QWidget):
     def __init__(self, win):
         super().__init__(); self.win = win; self.prefix = str(ENG.cfg.get('ex_prefix') or ''); self.sort = str(ENG.cfg.get('ex_sort') or 'size'); self._j = None; self._seq = 0
         v = QVBoxLayout(self); v.setContentsMargins(14, 10, 14, 10); v.setSpacing(8)
-        top = QHBoxLayout(); self.q = QLineEdit(); self.q.setPlaceholderText('🔍 找檔案（像 Everything：空白分開，每個字都要出現在路徑裡；在某個資料夾裡就只找那裡）'); self.q.setClearButtonEnabled(True)
+        top = QHBoxLayout(); self.q = QLineEdit(); self.q.setPlaceholderText('🔍 找檔案（像 Everything：空白分開；也可以 size:>1g  ext:mkv  codec:h264  dur:>30m  cv:no；在某個資料夾裡就只找那裡）'); self.q.setClearButtonEnabled(True)
         self._qt = QTimer(self); self._qt.setSingleShot(True); self._qt.timeout.connect(self.refresh); self.q.textChanged.connect(lambda _t: self._qt.start(300))
         top.addWidget(self.q, 1); self.cb = QComboBox()
         for k, n in self.SORTS: self.cb.addItem(n, k)
         self.cb.setCurrentIndex(max(0, [k for k, _ in self.SORTS].index(self.sort) if self.sort in [k for k, _ in self.SORTS] else 0))
         self.cb.currentIndexChanged.connect(self._sort); top.addWidget(QLabel('排序')); top.addWidget(self.cb)
         b = QPushButton('⟳'); b.setToolTip('重新讀'); b.clicked.connect(lambda: (ENG.__dict__.pop('_exp_cache', None), self.refresh())); top.addWidget(b); v.addLayout(top)
+        ch = QHBoxLayout(); ch.setSpacing(4); self.chips = {}                       # V0.6.23 常用篩選一按就加進搜尋
+        for t, n in (('size:>1g', '大於 1GB'), ('size:>10g', '大於 10GB'), ('codec:h264', 'H.264'), ('codec:hevc', 'H.265'), ('ext:mkv,avi,wmv,mov,ts', '非 MP4'), ('dur:>60m', '超過 1 小時'), ('cv:no', '還沒轉')):
+            c = QPushButton(n); c.setObjectName('pill'); c.setCheckable(True); c.setToolTip(t); c.clicked.connect(lambda _c=False, t=t: self._chip(t)); ch.addWidget(c); self.chips[t] = c
+        ch.addStretch(1); v.addLayout(ch)
+        self.q.textChanged.connect(lambda t: [c.setChecked(k in t.split()) for k, c in self.chips.items()])
         nav = QHBoxLayout(); self.b_up = QPushButton('⬆ 上一層'); self.b_up.clicked.connect(self.up); nav.addWidget(self.b_up)
         self.crumb = QLabel(); self.crumb.setTextFormat(Qt.RichText); self.crumb.linkActivated.connect(self.go); self.crumb.setWordWrap(True); nav.addWidget(self.crumb, 1); v.addLayout(nav)
         kp = QHBoxLayout(); self.k = {}
@@ -6464,6 +6469,9 @@ class ExplorePage(QWidget):
         self.tabs.addTab(scroll_wrap(self.mix), '🎞 編碼／格式')
         sp.addWidget(self.tabs); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
         self.hint = QLabel('點方塊或按兩下進去・右鍵（或手機長按）資料夾 → 🔁 轉檔／到檔案總管・方塊底下綠線＝能轉 H.265 的部分'); self.hint.setStyleSheet('color:#8994a4;font-size:11.5px'); v.addWidget(self.hint)
+
+    def _chip(self, t):
+        L = self.q.text().split(); L = [x for x in L if x != t] if t in L else L + [t]; self.q.setText(' '.join(L))
 
     def _sort(self, _i):
         self.sort = self.cb.currentData() or 'size'; ENG.cfg.set('ex_sort', self.sort); self.refresh()
