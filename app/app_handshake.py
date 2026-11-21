@@ -40,12 +40,19 @@ import time
 from pathlib import Path
 
 PROTO = 'apphs/1'
-RULES = 5              # 規則版本：改 decide 的規則就加 1（越大越新）
+RULES = 6              # 規則版本：改 decide 的規則就加 1（越大越新）
 EVERY = 2.0            # 幾秒寫一次
 STALE = 10.0           # 幾秒沒更新算不在
 LOSE_CPU = 20.0        # 讓路的那邊：重工作最多用整台 CPU 的 %
 SPLIT_CPU = 45.0       # （第 1 版用的平分上限；第 2 版改成看 policy）
 WANT_TXT = {0: '閒著', 1: '背景小工作', 2: '在做重工作', 3: '使用者在等'}
+# 規則第 6 版（SortCut V0.6.21）：🎨 自動偵測 ComfyUI（就算 ComfyRemote 沒開、或是直接在 ComfyUI 網頁按的）
+#   * 有開 ComfyWatch 的程式（目前 SortCut）每 3 秒問一次本機 ComfyUI（127.0.0.1:8188／8000 的 /queue），
+#     把結果寫成一個「代理」狀態檔 ComfyUI.json（app＝ComfyUI，pid＝寫的那個程式；它關掉檔就失效）：
+#     佇列裡有工作 → want 2；progress_t＝佇列有變化、或顯示卡被「別人」用超過 15% 的最後時間；use.gpu＝顯示卡被別人用的 %。
+#   * 規則：ComfyRemote 自己在做事（want≥2）→ ComfyUI.json 不算（ComfyRemote 已經代表它）；
+#     否則 ComfyUI 在做事 → 它就是這一輪的優先程式（跟 ComfyRemote 一樣拿 boost，其他 boost_others，也一樣有卡住偵測）。
+#   * members 有勾 ComfyRemote（或沒設 members）→ ComfyUI 也算參與。
 # 規則第 5 版（SortCut V0.6.18）：使用者要「CPU／顯示卡不要閒著」
 #   * 🧑‍💻 有人在用電腦（鍵盤／滑鼠 3 分鐘內動過）才留 reserve %；沒人在用 → 大家合起來可以用到 100%。
 #   * 🧊 卡住偵測：優先程式（ComfyRemote）說「在做事」(want≥2)，可是超過 stall_sec（預設 5 分鐘）沒有進度
@@ -314,6 +321,21 @@ def alloc3(states, P3=None):
     return out
 
 
+COMFY = 'ComfyUI'
+
+
+def comfy6(states, P3):
+    """第 6 版：決定這一輪的優先程式（ComfyRemote 或 ComfyUI 代理），回 (states, P3x)."""
+    B = P3.get('boost_app') or 'ComfyRemote'; M = list(P3.get('members') or [])
+    if COMFY not in states: return states, P3
+    if M and B in M and COMFY not in M: M = M + [COMFY]
+    sB = states.get(B)
+    if sB and int(sB.get('want') or 0) >= 2:
+        return {a: v for a, v in states.items() if a != COMFY}, {**P3, 'members': M}
+    if int(states[COMFY].get('want') or 0) >= 2: return states, {**P3, 'members': M, 'boost_app': COMFY, 'lv': {**P3.get('lv', {}), COMFY: 10}}
+    return {a: v for a, v in states.items() if a != COMFY}, {**P3, 'members': M}
+
+
 def decide_with(me, P, pol=None, idle=None):
     """規則本體（第 3 版）。欄位跟第 2 版一樣，另外多 lv／alloc／members／p3。policy3 的 on＝False → 用第 2 版."""
     P3 = policy3()
@@ -325,6 +347,7 @@ def decide_with(me, P, pol=None, idle=None):
     if M and app not in M: return {**base, 'mode': 'alone', 'peer': '', 'why': '這台電腦的握手沒有勾這個程式（不參與，不受限）'}
     states = {app: me}
     for p in P: states.setdefault(str(p.get('app') or ''), p)
+    states, P3 = comfy6(states, P3); M = P3['members']                           # 第 6 版：ComfyUI 自己在跑也讓它
     states, budget5, active5, stalled5 = prep5(states, P3)                      # 第 5 版：沒人在用 → 預算 100；優先程式卡住 → 不讓它
     P3x = {**P3, 'reserve': 100.0 - budget5}
     A = conserve5(alloc3(states, P3x), states, budget5)
@@ -390,11 +413,68 @@ def newest_rules():
         return None
 
 
+class ComfyWatch:
+    """第 6 版：問本機 ComfyUI 佇列，寫代理狀態檔 ComfyUI.json（只用標準函式庫；連不上很快就放棄，30 秒後再試）."""
+    PORTS = (8188, 8000)
+
+    def __init__(self, owner, gpu_other=None, ports=None):
+        self.owner = owner; self.gpu_other = gpu_other or (lambda: None); self.ports = tuple(ports or self.PORTS)
+        self.port = 0; self.t = 0.0; self.back = 0.0; self.sig = None; self.prog = 0.0; self.busy_since = 0.0; self.last = {}; self.path = folder() / f'{COMFY}.json'
+
+    def _get(self, port, path):
+        import urllib.request
+        op = urllib.request.build_opener(urllib.request.ProxyHandler({}))          # 本機，不要走系統代理
+        with op.open(f'http://127.0.0.1:{port}{path}', timeout=0.6) as r: return json.loads(r.read().decode('utf-8', 'replace') or '{}')
+
+    def poll(self):
+        now = time.time()
+        if now < self.back: return self.last
+        q = None
+        for port in ([self.port] if self.port else []) + [p for p in self.ports if p != self.port]:
+            try: q = self._get(port, '/queue'); self.port = port; break
+            except Exception: continue
+        if not isinstance(q, dict):
+            self.port = 0; self.back = now + 30; self.last = {}; self.remove(); return {}
+        run = q.get('queue_running') or []; pend = q.get('queue_pending') or []
+        sig = (tuple(str(x[1]) if isinstance(x, (list, tuple)) and len(x) > 1 else str(x) for x in run), len(pend))
+        g = None
+        try: g = self.gpu_other()
+        except Exception: pass
+        busy = bool(run or pend)
+        if sig != self.sig: self.sig = sig; self.prog = now
+        if busy and g is not None and float(g) >= 15: self.prog = now
+        self.busy_since = (self.busy_since or now) if busy else 0.0
+        self.last = {'port': self.port, 'run': len(run), 'pend': len(pend), 'gpu': g, 'progress_t': self.prog if busy else None, 'busy_since': self.busy_since or None}
+        self.write(); return self.last
+
+    def write(self):
+        L = self.last or {}; n = int(L.get('run', 0)) + int(L.get('pend', 0))
+        d = {'proto': PROTO, 'app': COMFY, 'name': f'ComfyUI（{self.owner} 看到的）', 'ver': '', 'pid': os.getpid(), 'port': int(L.get('port') or 0),
+             'host': os.environ.get('COMPUTERNAME', ''), 't': time.time(), 'on': True, 'want': 2 if n else 0, 'prio': 5, 'proxy': self.owner,
+             'what': (f'ComfyUI 佇列 {L.get("run", 0)} 個在跑、{L.get("pend", 0)} 個在排' if n else 'ComfyUI 開著，沒有工作'),
+             'use': {'gpu': round(float(L.get('gpu') or 0), 1)}, 'rules': RULES, 'rules_own': RULES,
+             'busy_since': L.get('busy_since'), 'progress_t': L.get('progress_t'), 'idle': None, 'mode': 'proxy'}
+        try:
+            tmp = self.path.with_suffix('.ctmp'); tmp.write_text(json.dumps(d, ensure_ascii=False), encoding='utf-8'); os.replace(tmp, self.path)
+        except Exception: pass
+
+    def remove(self):
+        try:
+            if self.path.exists():
+                d = json.loads(self.path.read_text(encoding='utf-8'))
+                if int(d.get('pid') or 0) == os.getpid(): self.path.unlink()
+        except Exception: pass
+
+
 class Handshake:
     def __init__(self, app, name='', ver='', port=0, state=None):
         self.app = str(app); self.name = name or self.app; self.ver = str(ver); self.port = int(port or 0)
         self.state = state or (lambda: {}); self.stop_ = False; self.me = {}; self.others = {}; self.err = ''; self.t = 0.0
-        self.path = folder() / f'{self.app}.json'; self.th = None
+        self.path = folder() / f'{self.app}.json'; self.th = None; self.comfy = None; self._ct = 0.0
+
+    def watch_comfy(self, gpu_other=None, ports=None):
+        """第 6 版：這個程式幫大家看 ComfyUI（寫 ComfyUI.json）。gpu_other()＝整台顯示卡扣掉自己用的 %."""
+        self.comfy = ComfyWatch(self.app, gpu_other, ports); return self
 
     # ---------------------------------------------------------------- 寫自己、讀別人
     def _me(self):
@@ -483,6 +563,10 @@ class Handshake:
     def _loop(self):
         publish()
         while not self.stop_:
+            if self.comfy is not None and time.time() - self._ct >= 1.9:            # 先看 ComfyUI，同一輪就讀得到
+                self._ct = time.time()
+                try: self.comfy.poll()
+                except Exception as ex: self.err = f'ComfyUI：{ex}'[:160]
             try: self.read(); self.write()
             except Exception as ex: self.err = str(ex)[:160]
             time.sleep(EVERY)
@@ -494,6 +578,7 @@ class Handshake:
 
     def stop(self, remove=True):
         self.stop_ = True
+        if self.comfy is not None: self.comfy.remove()
         if remove:
             try: self.path.unlink()
             except Exception: pass

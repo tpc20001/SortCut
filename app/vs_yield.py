@@ -608,7 +608,10 @@ class Yield:
         try:
             if self.hs is None:
                 import app_handshake as HS
-                self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state).start()
+                self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state)
+                if self.cfg('hs_comfy') is not False and hasattr(self.hs, 'watch_comfy'):      # V0.6.21 🎨 自動看本機 ComfyUI 有沒有在跑
+                    self.hs.watch_comfy(lambda: (None if (self.sample or {}).get('gpu') is None else max(0.0, float(self.sample.get('gpu') or 0) - float(self.sample.get('gpu_vs') or 0) - float(self.sample.get('gpu_tk') or 0))))
+                self.hs.start()
             d = self.hs.decide(); self.gov.cap_why = ''; self.hs_d = d
             if not self.on or d.get('cpu_cap') is None: return                   # V0.6.17 規則第 4 版：只要有 cpu_cap（整台 CPU 的 %）就照它換成等級
             cap_lv = max(1, min(10, int(math.ceil(float(d['cpu_cap']) / 10.0))))

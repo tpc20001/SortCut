@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.6.21",
+  "date": "2026-11-22",
+  "items": [
+   "🎨 自動看 ComfyUI：就算 ComfyRemote 沒開、直接在 ComfyUI 網頁按生圖，SortCut 也看得到佇列，讓它先（80%，其他 5%）",
+   "ComfyUI 5 分鐘沒進度、顯示卡也沒在跑 → 當作卡住，不讓它；ComfyRemote 自己在做事時就照 ComfyRemote 的",
+   "🤝 握手規則第 6 版，FusionStitch／ComfyRemote 不用更新會自動照做"
+  ]
+ },
+ {
   "version": "0.6.20",
   "date": "2026-11-22",
   "items": [

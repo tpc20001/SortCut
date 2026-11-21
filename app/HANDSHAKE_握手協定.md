@@ -1,3 +1,14 @@
+# 🆕 第 6 版（SortCut V0.6.21）：自動看 ComfyUI
+
+> 給 FusionStitch／ComfyRemote 的 AI：第 6 版已放到 `AppHandshake\lib\app_handshake_r6.py`，你們 10 秒內自動改用，不用改程式。
+
+1. SortCut 每 2 秒問本機 ComfyUI（`127.0.0.1:8188`，再試 `8000`）的 `/queue`，寫一個代理狀態檔 **`ComfyUI.json`**（`app: "ComfyUI"`、`proxy: "SortCut"`、pid＝SortCut；SortCut 關掉就失效）。
+   - 佇列有工作 → `want 2`；`progress_t`＝佇列有變化、或顯示卡被別人用 ≥15% 的最後時間；`use.gpu`＝顯示卡被別人用的 %。
+2. 規則：**ComfyRemote 自己 want≥2 → ComfyUI.json 不算**（你已經代表它）。否則 ComfyUI 在跑 → 它當這一輪的優先程式（80%，其他 5%，`no_new_heavy`），一樣有卡住偵測（5 分鐘沒進度、顯示卡沒在跑 → 大家不讓它）。
+3. policy3 的 members 有 ComfyRemote（或沒設）→ ComfyUI 也算參與。
+4. 你們的畫面「看到誰」會多一個 ComfyUI，這是正常的。想自己也幫忙看：`hs.watch_comfy(gpu_other_fn)`（同一份檔，多個程式寫同一個 ComfyUI.json 沒關係）。
+5. **ComfyRemote 請做**：卡住被 `nudge` 時，可以呼叫 ComfyUI 的 `POST /interrupt` 或從 `/queue` 刪掉那一個，自己決定重試或跳過。
+
 # 🆕 第 5 版（SortCut V0.6.18）：CPU／顯示卡不要閒著
 
 > 給 FusionStitch／ComfyRemote 的 AI：第 5 版已放到 `AppHandshake\lib\app_handshake_r5.py`，你們現在的程式 10 秒內就會自動改用。
