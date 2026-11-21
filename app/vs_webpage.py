@@ -1265,6 +1265,11 @@ async function exConvMenu(path,name){toast('計算可以省多少…');
   menu('🔁 轉檔「'+name+'」',[...K.map(([k,n],i)=>{const x=P[i]||{};return [`${n}：${(x.n_all||0).toLocaleString()} 部・預估省 ${fmtB(x.save_all||0)}`,()=>go(k)]}),
     ['📂 到檔案總管看這個資料夾',()=>{S.folder=path;S.flt='all';S.q='';S.sub=true;saveView();location.hash='fx'}],
     ['📋 複製路徑',async()=>{try{await navigator.clipboard.writeText(path);toast('📋 '+path)}catch(e){prompt('長按複製：',path)}}]])}
+function exMix(j,tot){const bar=(L,lab)=>`<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;gap:2px;margin:6px 0 3px">${L.map((x,i)=>`<div title="${esc(lab(x))} ${fmtB(x.size)}" style="flex:${x.size/tot};min-width:3px;background:${EXC[i%EXC.length]}"></div>`).join('')}</div><div class="mu" style="display:flex;flex-wrap:wrap;gap:3px 10px">${L.map((x,i)=>`<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${EXC[i%EXC.length]}"></i> ${esc(lab(x))} ${fmtB(x.size)}・${x.n.toLocaleString()}</span>`).join('')}</div>`;
+  const C=j.codecs||[],X=j.exts||[],B=j.big||[];let h='';
+  if(C.length)h+=`<div class="panel"><b>🎞 影片編碼</b> <span class="mu">（H264 越多，轉 H.265 越能省）</span>${bar(C,x=>x.codec.toUpperCase())}<b style="display:block;margin-top:8px">📄 副檔名</b>${bar(X,x=>x.ext)}</div>`;
+  if(B.length)h+=`<div class="panel list"><b>🐘 這裡最大的 ${B.length} 個檔</b>${B.map(r=>`<div class="si" data-exf="${r.id}" style="cursor:pointer"><div style="display:flex;gap:8px"><span style="flex:1;min-width:0;word-break:break-all">${esc(r.name)}</span><b>${fmtB(r.size)}</b></div><small class="mu" style="word-break:break-all">${esc(r.folder)}・${esc((r.vcodec||'').toUpperCase())}${r.cv===3?'・✔ 轉好':''}</small></div>`).join('')}</div>`;
+  return h}
 async function tExplore(){const tb=$('#tb');if(!tb)return;
   const crumbs=()=>{if(!EX.p)return '<b>💽 全部影片庫</b>';const parts=EX.p.split('\\').filter(Boolean);let acc='',h=`<a href="#" data-exp="">💽</a>`;
     parts.forEach((x,i)=>{acc=i?acc+'\\'+x:x;h+=` › <a href="#" data-exp="${esc(acc)}">${esc(x)}</a>`});return h};
@@ -1291,11 +1296,11 @@ async function tExplore(){const tb=$('#tb');if(!tb)return;
         <div style="height:6px;background:var(--vline);border-radius:3px;margin:5px 0 3px;overflow:hidden;display:flex"><div style="width:${v/mx*100}%;background:#3987e5;border-radius:3px;display:flex;justify-content:flex-end"><div style="width:${x.size?Math.min(100,x.conv_b/x.size*100):0}%;background:var(--green)"></div></div></div>
         <small class="mu">${x.n.toLocaleString()} 個檔・佔 ${Math.round(x.size/tot*100)}%${x.conv_n?`・能轉 ${x.conv_n.toLocaleString()} 部，預估省 <b style="color:var(--green)">${fmtB(x.save)}</b>`:''}</small></div>`}).join('')}
       ${H.n?`<div class="si"><small class="mu">📄 直接放在這一層的檔案：${H.n.toLocaleString()} 個・${fmtB(H.size)}</small></div>`:''}${!I.length&&!H.n?'<div class="empty">這裡沒有影片</div>':''}</div>
-      <div class="mu"><span style="color:#3987e5">■</span> 大小　<span style="color:var(--green)">■</span> 能轉 H.265 的部分・長按（或按 ⋯）資料夾 → 轉檔／到檔案總管</div>`;
+      <div class="mu"><span style="color:#3987e5">■</span> 大小　<span style="color:var(--green)">■</span> 能轉 H.265 的部分・長按（或按 ⋯）資料夾 → 轉檔／到檔案總管</div>`+exMix(j,tot);
     const ec=$('#exconv');if(ec)ec.onclick=()=>exConvMenu(EX.p,EX.p.split('\\').pop()||EX.p);
     let lp=0,lpd=false;const down=e=>{const r=e.target.closest('[data-exn]');if(!r)return;lpd=false;clearTimeout(lp);lp=setTimeout(()=>{lpd=true;try{navigator.vibrate&&navigator.vibrate(20)}catch(x){}exConvMenu(r.dataset.exd,r.dataset.exn)},550)};
     b.onpointerdown=down;b.onpointerup=b.onpointercancel=b.onpointerleave=()=>clearTimeout(lp);b.oncontextmenu=e=>{if(e.target.closest('[data-exn]'))e.preventDefault()};
-    b.onclick=e=>{if(lpd){lpd=false;return}const m=e.target.closest('[data-exm]'),r=e.target.closest('[data-exd]');if(!r)return;if(m){const row=m.closest('[data-exn]');return exConvMenu(row.dataset.exd,row.dataset.exn)}EX.p=r.dataset.exd;exSave();tExplore()}};
+    b.onclick=e=>{if(lpd){lpd=false;return}const ff=e.target.closest('[data-exf]');if(ff)return openFile(+ff.dataset.exf);const m=e.target.closest('[data-exm]'),r=e.target.closest('[data-exd]');if(!r)return;if(m){const row=m.closest('[data-exn]');return exConvMenu(row.dataset.exd,row.dataset.exn)}EX.p=r.dataset.exd;exSave();tExplore()}};
   draw()}
 async function tConv(){LS.set('cv',CV);
   $('#tb').innerHTML=`<div id="cvg"></div><div class="seg" id="cvtab" style="margin-bottom:8px;width:100%">${[['pick','➕ 選檔'],['run','⚙ 轉檔中'],['done','✔ 完成'],['fail','✖ 失敗']].map(([k,n])=>`<button data-k="${k}" style="flex:1"${CV.tab===k?' class="on"':''}>${n}</button>`).join('')}</div><div id="cvb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;

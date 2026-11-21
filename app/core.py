@@ -5460,7 +5460,17 @@ class Engine:
             r_ = self.root_of(prefix) if hasattr(self, 'root_of') else None
             if not (r_ and os.path.normcase(prefix.rstrip('\\/')) == os.path.normcase(str(r_).rstrip('\\/'))) and '\\' in prefix:
                 parent = prefix.rsplit('\\', 1)[0]
-        out = {'ok': True, 'prefix': prefix, 'parent': parent, 'items': items, 'here': here, 'tot': tot, 'ratio': ratio, 'sort': sort, 't': time.time()}
+        try:                                                                     # V0.6.20 這裡最大的 20 個檔、各種格式佔多少
+            if prefix: fw, fa = "missing=0 AND (folder=? OR folder LIKE ? ESCAPE '^')", (eq, lk)
+            else: fw, fa = 'missing=0', ()
+            big = [{'id': int(r[0]), 'name': r[1], 'folder': r[2], 'size': int(r[3] or 0), 'vcodec': r[4] or '', 'cv': int(r[5] or 0)}
+                   for r in self.db.q(f"SELECT id, name, folder, size, vcodec, cv_state FROM files WHERE {fw} ORDER BY size DESC LIMIT 20", fa)]
+            exts = [{'ext': (r[0] or '').lower() or '（沒有）', 'n': int(r[1] or 0), 'size': int(r[2] or 0)}
+                    for r in self.db.q(f"SELECT lower(ext), COUNT(*), SUM(size) FROM files WHERE {fw} GROUP BY lower(ext) ORDER BY SUM(size) DESC LIMIT 12", fa)]
+            codecs = [{'codec': (r[0] or '').lower() or '（還沒讀）', 'n': int(r[1] or 0), 'size': int(r[2] or 0)}
+                      for r in self.db.q(f"SELECT lower(vcodec), COUNT(*), SUM(size) FROM files WHERE {fw} GROUP BY lower(vcodec) ORDER BY SUM(size) DESC LIMIT 8", fa)]
+        except Exception: big, exts, codecs = [], [], []
+        out = {'ok': True, 'prefix': prefix, 'parent': parent, 'items': items, 'here': here, 'tot': tot, 'ratio': ratio, 'sort': sort, 't': time.time(), 'big': big, 'exts': exts, 'codecs': codecs}
         C[ck] = (time.time(), out)
         if len(C) > 200: C.clear()
         return out

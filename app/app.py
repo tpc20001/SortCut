@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.19'
+APP_VERSION = '0.6.20'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6454,7 +6454,13 @@ class ExplorePage(QWidget):
         sp = QSplitter(Qt.Vertical); self.tm = TreeMap(self); sp.addWidget(self.tm)
         self.tw = QTreeWidget(); self.tw.setRootIsDecorated(False); self.tw.setAlternatingRowColors(True); self.tw.setUniformRowHeights(True)
         self.tw.setContextMenuPolicy(Qt.CustomContextMenu); self.tw.customContextMenuRequested.connect(self._ctx); self.tw.itemDoubleClicked.connect(self._dbl)
-        sp.addWidget(self.tw); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
+        self.tabs = QTabWidget(); self.tabs.addTab(self.tw, '📁 資料夾')
+        self.tw_big = QTreeWidget(); self.tw_big.setRootIsDecorated(False); self.tw_big.setAlternatingRowColors(True); self.tw_big.setHeaderLabels(['檔名', '大小', '資料夾', '編碼'])
+        self.tw_big.itemDoubleClicked.connect(self._dbl); self.tw_big.setContextMenuPolicy(Qt.CustomContextMenu); self.tw_big.customContextMenuRequested.connect(lambda pos: self._ctx(pos, self.tw_big))
+        self.tabs.addTab(self.tw_big, '🐘 最大的 20 個檔')
+        self.mix = QLabel(); self.mix.setTextFormat(Qt.RichText); self.mix.setWordWrap(True); self.mix.setAlignment(Qt.AlignTop | Qt.AlignLeft); self.mix.setMargin(10)
+        self.tabs.addTab(scroll_wrap(self.mix), '🎞 編碼／格式')
+        sp.addWidget(self.tabs); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
         self.hint = QLabel('點方塊或按兩下進去・右鍵（或手機長按）資料夾 → 🔁 轉檔／到檔案總管・方塊底下綠線＝能轉 H.265 的部分'); self.hint.setStyleSheet('color:#8994a4;font-size:11.5px'); v.addWidget(self.hint)
 
     def _sort(self, _i):
@@ -6487,7 +6493,7 @@ class ExplorePage(QWidget):
         if not j or not j.get('ok'): return
         self.tw.clear()
         if q:
-            self._j = None; self.tm.setVisible(False); self.b_conv.setVisible(False)
+            self._j = None; self.tm.setVisible(False); self.b_conv.setVisible(False); self.tabs.setCurrentIndex(0)
             self.tw.setHeaderLabels(['檔名', '大小', '資料夾', '格式']); R = j.get('rows') or []
             self.k['size'].setText(core.fmt_b(j.get('sum', 0))); self.k['n'].setText(f"{j.get('n', 0):,}{'+' if j.get('more') else ''}"); self.k['conv_n'].setText('—'); self.k['save'].setText('—')
             for r in R:
@@ -6514,6 +6520,20 @@ class ExplorePage(QWidget):
             for c in range(1, 6): it.setTextAlignment(c, Qt.AlignRight | Qt.AlignVCenter)
             self.tw.addTopLevelItem(it)
         for c, w in ((0, 340), (1, 90), (2, 70), (3, 80), (4, 70), (5, 90)): self.tw.setColumnWidth(c, w)
+        self.tw_big.clear()                                                      # V0.6.20 最大的 20 個檔、編碼／格式
+        for r in j.get('big') or []:
+            it = QTreeWidgetItem([r['name'], core.fmt_b(r['size']), r['folder'], (r.get('vcodec') or '').upper() + ('・✔ 轉好' if r.get('cv') == 3 else '')])
+            it.setData(0, Qt.UserRole, ('f', r)); it.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter); self.tw_big.addTopLevelItem(it)
+        for c, w in ((0, 380), (1, 90), (2, 380)): self.tw_big.setColumnWidth(c, w)
+        def bars(L, lab):
+            h = '<table width="100%" cellspacing="0" cellpadding="3">'
+            for i, x in enumerate(L):
+                pct = x['size'] / tot * 100; col = TreeMap.COLS[i % len(TreeMap.COLS)]
+                h += (f'<tr><td width="120"><b>{_html.escape(lab(x))}</b></td><td width="55%"><table cellspacing="0" cellpadding="0" width="{max(1, int(pct))}%"><tr><td bgcolor="{col}" height="12"></td></tr></table></td>'
+                      f'<td align="right">{core.fmt_b(x["size"])}</td><td align="right" style="color:#8994a4">{pct:.1f}%・{x["n"]:,} 個</td></tr>')
+            return h + '</table>'
+        C = j.get('codecs') or []; X = j.get('exts') or []
+        self.mix.setText((f'<b>🎞 影片編碼</b> <span style="color:#8994a4">（H264 越多，轉 H.265 越能省）</span>{bars(C, lambda x: x["codec"].upper())}<br><b>📄 副檔名</b>{bars(X, lambda x: x["ext"])}') if C or X else '<span style="color:#8994a4">這裡沒有影片</span>')
         self.hint.setText('點方塊或按兩下進去・右鍵資料夾 → 🔁 轉檔（H.264→H.265 等，先算好能省多少）／到檔案總管・方塊底下綠線＝能轉的部分')
 
     def _dbl(self, it, _c):
@@ -6522,11 +6542,11 @@ class ExplorePage(QWidget):
         elif k == 'h': self._to_browse(self.prefix)
         elif k == 'f': self.win.nav.setCurrentRow(0); self.win.browse.goto_file(int(x['id']))
 
-    def _ctx(self, pos):
-        it = self.tw.itemAt(pos)
+    def _ctx(self, pos, tw=None):
+        tw = tw or self.tw; it = tw.itemAt(pos)
         if it is None: return
         k, x = it.data(0, Qt.UserRole) or ('', {})
-        g = self.tw.viewport().mapToGlobal(pos)
+        g = tw.viewport().mapToGlobal(pos)
         if k == 'f':
             m = QMenu(self); m.addAction('📂 在 Windows 檔案總管顯示', lambda: core.explorer_select(x.get('path') or ''))
             m.addAction('▦ 到 SortCut 檔案總管看這部', lambda: (self.win.nav.setCurrentRow(0), self.win.browse.goto_file(int(x['id']))))
