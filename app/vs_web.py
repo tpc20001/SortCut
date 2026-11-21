@@ -1460,9 +1460,14 @@ class WebServer:
         import vs_cloudupd as CU
         if req.method != 'POST':
             r = getattr(E, 'cloud_upd', None) or {}
-            return jresp({'ok': True, 'cur': M.APP_VERSION, 'launcher': CU.launcher_ver(), 'r': {k: r.get(k) for k in ('ok', 'newer', 'message', 't', 'info')} if r else None})
+            return jresp({'ok': True, 'cur': M.APP_VERSION, 'launcher': CU.launcher_ver(), 'auto': E.cfg.get('cloud_auto') is True, 'r': {k: r.get(k) for k in ('ok', 'newer', 'message', 't', 'info')} if r else None})
         if self.is_ro(req): return jresp({'ok': False, 'message': '👀 這支手機是唯讀登入：只能看，不能改'})
         a = (req.json() or {}).get('a')
+        if a == 'auto':                                                         # V0.6.29 有新版自動熱更新
+            on = bool((req.json() or {}).get('on')); E.cfg.set('cloud_auto', on)
+            try: self._ui(lambda: W.upd.cb_cauto.setChecked(on))
+            except Exception: pass
+            return jresp({'ok': True, 'message': '☁ 有新版會自動熱更新（你 5 分鐘沒碰電腦時）' if on else '☁ 自動熱更新關了（要自己按更新）'})
         if a == 'check':
             r = CU.check(M.APP_VERSION); E.cloud_upd = r
             try: W._cloud = r; self._ui(lambda: W.upd.cloud_show(r))

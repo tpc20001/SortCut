@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.28'
+APP_VERSION = '0.6.29'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -8278,7 +8278,10 @@ class UpdPage(QWidget):
         b4 = QPushButton('☁ 檢查雲端更新'); b4.setToolTip('從 GitHub 看有沒有新版（開程式 1 分鐘後、之後每 6 小時也會自動看）')
         self.cb_cloud = QCheckBox('自動檢查'); self.cb_cloud.setChecked(ENG.cfg.get('cloud_upd') is not False)
         self.cb_cloud.toggled.connect(lambda on: ENG.cfg.set('cloud_upd', bool(on)))
-        for w in (b4, self.cb_cloud, b1, self.b_go, b3, b2): r.addWidget(w)
+        self.cb_cauto = QCheckBox('有新版自動熱更新'); self.cb_cauto.setChecked(ENG.cfg.get('cloud_auto') is True)       # V0.6.29
+        self.cb_cauto.setToolTip('每 30 分鐘看一次；有新版、而且你 5 分鐘沒碰電腦，就自己下載＋熱更新（不用按、不換外殼）')
+        self.cb_cauto.toggled.connect(lambda on: ENG.cfg.set('cloud_auto', bool(on)))
+        for w in (b4, self.cb_cloud, self.cb_cauto, b1, self.b_go, b3, b2): r.addWidget(w)
         b4.clicked.connect(lambda: self.win._cloud_check(True))
         r.addStretch(1)
         self.cinfo = QLabel(f'☁ 雲端更新：啟動器（EXE）第 {os.environ.get("SC_LAUNCHER") or 1} 版'); self.cinfo.setWordWrap(True); self.cinfo.setTextFormat(Qt.RichText); v.addWidget(self.cinfo)
@@ -9053,6 +9056,7 @@ class Main(QMainWindow):
         self._cloud = None; self._cloud_busy = False                              # V0.6.01 ☁ GitHub 雲端更新：開程式 1 分鐘後看一次，之後每 6 小時
         QTimer.singleShot(60000, lambda: self._cloud_check(False))
         self.cut_ = QTimer(self); self.cut_.timeout.connect(lambda: self._cloud_check(False)); self.cut_.start(6 * 3600 * 1000)
+        self.cauto_ = QTimer(self); self.cauto_.timeout.connect(lambda: ENG.cfg.get('cloud_auto') is True and self._cloud_check(False)); self.cauto_.start(30 * 60 * 1000)   # V0.6.29 自動熱更新：30 分鐘看一次
         self.cover = CoverPage(self); self.outer.addWidget(self.cover); self.outer.addWidget(self.mainw)
         sc = QShortcut(QKeySequence('Ctrl+L'), self); sc.setContext(Qt.ApplicationShortcut); sc.activated.connect(self.show_cover)
         sck = QShortcut(QKeySequence('Ctrl+K'), self); sck.setContext(Qt.ApplicationShortcut); sck.activated.connect(self.cmd_palette)        # V0.2.30
@@ -9163,6 +9167,13 @@ class Main(QMainWindow):
             if not r['newer']:
                 if manual: QMessageBox.information(self, '☁ 檢查更新', f'已經是最新版（V{APP_VERSION}）')
                 return
+            if not manual and ENG.cfg.get('cloud_auto') is True and not I.get('shell_only'):    # V0.6.29 有新版自動熱更新（使用者 5 分鐘沒碰電腦才換，不打斷你）
+                try:
+                    import app_handshake as HS_; idle_ = HS_.idle_seconds()
+                except Exception: idle_ = None
+                if idle_ is None or idle_ >= 300:
+                    upd_log(f'雲端有新版 V{v}：自動熱更新（cloud_auto）'); ENG.log.w(f'☁ 自動熱更新 V{v}'); self._cloud_go(); return
+                upd_log(f'雲端有新版 V{v}：你正在用電腦，等沒在用再自動更新'); QTimer.singleShot(5 * 60 * 1000, lambda: self._cloud_check(False))
             if not manual and ENG.cfg.get('cloud_skip') == (f'L{I.get("launcher")}' if I.get('shell_only') else v): return
             if self.ubar.isVisible() and self._ubar_path != 'cloud': return
             notes = list(I.get('notes') or [])[:3]
