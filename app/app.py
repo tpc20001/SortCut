@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.21'
+APP_VERSION = '0.6.22'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -1968,6 +1968,8 @@ class BrowsePage(QWidget):
         if not d: return
         m = QMenu(self); is_root = any(core.path_key(d) == core.path_key(r) for r in ENG.cfg.get('roots') or [])
         m.addAction('📂 打開這個資料夾', lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(d)))
+        if hasattr(self.win, 'explore'): m.addAction('🗺 看大小／能省多少（檔案總覽）', lambda: (self.win.explore.go(d.rstrip('\\/')), self.win.nav.setCurrentRow(74)))   # V0.6.22
+        if hasattr(self.win, 'conv'): m.addAction('🔁 轉檔這個資料夾…', lambda: self.win.explore.menu_for({'path': d.rstrip('\\/'), 'name': Path(d).name or d}, None))
         m.addAction('⚡ 這個資料夾的預覽圖先做', lambda: bg(lambda: ENG.folder_front(d), lambda n_: self.win.msg(f'{Path(d).name or d}：{n_} 部排到最前面做預覽圖')))
         if lab_cfg().get('folder_move') and len(d) > 3: m.addAction('🚚 搬到別顆硬碟…（紀錄跟著過去）', lambda: self._folder_move(d))   # V0.2.34
         am = m.addMenu('📦 歸檔這個資料夾（含子資料夾）')
