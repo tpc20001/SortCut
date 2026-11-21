@@ -1263,6 +1263,7 @@ async function exConvMenu(path,name){toast('計算可以省多少…');
   const P=await Promise.all(K.map(([k])=>api(U('/api/conv2',{a:'plan',kind:k,sort:'size_desc',exts:'',smin:0,smax:0,folders:path,n:0,t:0}),undefined,{quiet:true}).catch(()=>({}))));
   const go=k=>{CV.fds=[path];CV.kind=k;CV.tab='pick';CV.exts=[];CV.n=0;CV.t=0;CV.sort='size_desc';LS.set('cv',CV);location.hash='tool/conv'};
   menu('🔁 轉檔「'+name+'」',[...K.map(([k,n],i)=>{const x=P[i]||{};return [`${n}：${(x.n_all||0).toLocaleString()} 部・預估省 ${fmtB(x.save_all||0)}`,()=>go(k)]}),
+    ['➕ 加到目前的轉檔範圍（不清掉原本的）',()=>{if(!CV.fds.includes(path))CV.fds.push(path);CV.tab='pick';LS.set('cv',CV);toast(`➕ 轉檔範圍現在 ${CV.fds.length} 個資料夾`);location.hash='tool/conv'}],
     ['📂 到檔案總管看這個資料夾',()=>{S.folder=path;S.flt='all';S.q='';S.sub=true;saveView();location.hash='fx'}],
     ['📋 複製路徑',async()=>{try{await navigator.clipboard.writeText(path);toast('📋 '+path)}catch(e){prompt('長按複製：',path)}}]])}
 function exMix(j,tot){const bar=(L,lab)=>`<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;gap:2px;margin:6px 0 3px">${L.map((x,i)=>`<div title="${esc(lab(x))} ${fmtB(x.size)}" style="flex:${x.size/tot};min-width:3px;background:${EXC[i%EXC.length]}"></div>`).join('')}</div><div class="mu" style="display:flex;flex-wrap:wrap;gap:3px 10px">${L.map((x,i)=>`<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${EXC[i%EXC.length]}"></i> ${esc(lab(x))} ${fmtB(x.size)}・${x.n.toLocaleString()}</span>`).join('')}</div>`;

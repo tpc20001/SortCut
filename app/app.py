@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.27'
+APP_VERSION = '0.6.28'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -3365,9 +3365,16 @@ class ConvPage(QWidget):
         for kk, b in self.kind_b.items(): b.setChecked(kk == k)
         self._ext_sel = set(); self._save_range(); self.load()
 
-    def use_folder(self, path, kind='all'):
-        """V0.6.19 從 🗺 檔案總覽 跳過來：範圍＝這個資料夾（含子資料夾）、種類＝選的那種、回到「➕ 選檔加入」."""
-        self.fd_list.clear(); self.fd_list.addItem(str(path)); self._ext_sel = set()
+    def use_folder(self, path, kind='all', add=False):
+        """V0.6.19 從 🗺 檔案總覽 跳過來：範圍＝這個資料夾（含子資料夾）、種類＝選的那種、回到「➕ 選檔加入」.
+        V0.6.28 path 可以是好幾個；add＝True 加到原本的範圍（kind=None 不改種類）."""
+        L = [str(x) for x in (path if isinstance(path, (list, tuple)) else [path]) if x]
+        if not add: self.fd_list.clear()
+        have = {self.fd_list.item(i).text().lower() for i in range(self.fd_list.count())}
+        for x in L:
+            if x.lower() not in have: self.fd_list.addItem(x); have.add(x.lower())
+        self._ext_sel = set()
+        if kind is None: kind = self.kind
         self.kind = kind; ENG.cfg.set('cv_kind', kind)
         for kk, b in self.kind_b.items(): b.setChecked(kk == kind)
         try: self.tabs.setCurrentIndex(0)
@@ -6463,6 +6470,7 @@ class ExplorePage(QWidget):
         sp = QSplitter(Qt.Vertical); self.tm = TreeMap(self); sp.addWidget(self.tm)
         self.tw = QTreeWidget(); self.tw.setRootIsDecorated(False); self.tw.setAlternatingRowColors(True); self.tw.setUniformRowHeights(True)
         self.tw.setContextMenuPolicy(Qt.CustomContextMenu); self.tw.customContextMenuRequested.connect(self._ctx); self.tw.itemDoubleClicked.connect(self._dbl)
+        self.tw.setSelectionMode(QAbstractItemView.ExtendedSelection)               # V0.6.28 Ctrl／Shift 選好幾個資料夾
         self.tabs = QTabWidget(); self.tabs.addTab(self.tw, '📁 資料夾')
         self.tw_big = QTreeWidget(); self.tw_big.setRootIsDecorated(False); self.tw_big.setAlternatingRowColors(True); self.tw_big.setHeaderLabels(['檔名', '大小', '資料夾', '編碼'])
         self.tw_big.itemDoubleClicked.connect(self._dbl); self.tw_big.setContextMenuPolicy(Qt.CustomContextMenu); self.tw_big.customContextMenuRequested.connect(lambda pos: self._ctx(pos, self.tw_big))
@@ -6579,6 +6587,10 @@ class ExplorePage(QWidget):
         if it is None: return
         k, x = it.data(0, Qt.UserRole) or ('', {})
         g = tw.viewport().mapToGlobal(pos)
+        sel = [(i.data(0, Qt.UserRole) or ('', {})) for i in tw.selectedItems()]
+        ds = [v_['path'] for k_, v_ in sel if k_ in ('d', 'h') and v_.get('path')]
+        if len(ds) > 1 and k in ('d', 'h'):                                      # V0.6.28 選好幾個資料夾一起轉
+            self.menu_for({'paths': ds, 'name': f'{len(ds)} 個資料夾'}, g); return
         if k == 'f':
             m = QMenu(self); m.addAction('📂 在 Windows 檔案總管顯示', lambda: core.explorer_select(x.get('path') or ''))
             m.addAction('▦ 到 SortCut 檔案總管看這部', lambda: (self.win.nav.setCurrentRow(0), self.win.browse.goto_file(int(x['id']))))
@@ -6591,14 +6603,15 @@ class ExplorePage(QWidget):
 
     def menu_for(self, x, gpos):
         """右鍵資料夾：先在背景算好三種轉檔各能省多少，再跳選單."""
-        path = x.get('path') or ''
-        if not path: return
+        paths = [p_ for p_ in (x.get('paths') or [x.get('path') or '']) if p_]
+        if not paths: return
+        path = paths[0] if len(paths) == 1 else paths
         self.win.msg('🗺 計算能省多少…', 2000)
         K = [('h264', 'H.264 → H.265'), ('nonmp4', '非 MP4 → MP4（H.265）'), ('all', '兩種都要')]
         def get():
             out = []
             for k, _n in K:
-                try: P = ENG.conv_plan(None, 0, 0, [path], 'size_desc', k, 0, 0)
+                try: P = ENG.conv_plan(None, 0, 0, list(paths), 'size_desc', k, 0, 0)
                 except Exception: P = {}
                 out.append(P or {})
             return out
@@ -6606,15 +6619,20 @@ class ExplorePage(QWidget):
             m = QMenu(self); m.setToolTipsVisible(True); t = m.addAction(f"🔁 轉檔「{x.get('name') or path}」"); t.setEnabled(False)
             for (k, n), p in zip(K, P):
                 na = int(p.get('n_all') or 0); a = m.addAction(f"   {n}：{na:,} 部・預估省 {core.fmt_b(p.get('save_all') or 0)}", lambda k=k: self.to_conv(path, k)); a.setEnabled(na > 0)
-            m.addSeparator(); m.addAction('▦ 到 SortCut 檔案總管看這個資料夾', lambda: self._to_browse(path))
-            m.addAction('📂 在 Windows 檔案總管打開', lambda: core.explorer_select(path)); m.addAction('📋 複製路徑', lambda: QApplication.clipboard().setText(path))
+            m.addAction('   ➕ 加到目前的轉檔範圍（不清掉原本的、種類不變）', lambda: self.to_conv(path, None, True))
+            m.addSeparator()
+            if len(paths) == 1:
+                m.addAction('▦ 到 SortCut 檔案總管看這個資料夾', lambda: self._to_browse(paths[0]))
+                m.addAction('📂 在 Windows 檔案總管打開', lambda: core.explorer_select(paths[0]))
+            m.addAction('📋 複製路徑', lambda: QApplication.clipboard().setText('\n'.join(paths)))
             m.exec(gpos or QCursor.pos())
         bg(get, show)
 
-    def to_conv(self, path, kind):
+    def to_conv(self, path, kind, add=False):
         try:
-            self.win.nav.setCurrentRow(1); self.win.conv.use_folder(path, kind)
-            self.win.msg(f'🔁 轉檔：已帶入「{path}」，種類＝{dict(CONV_KINDS).get(kind, kind)}；確認數量後按加入')
+            self.win.nav.setCurrentRow(1); self.win.conv.use_folder(path, kind, add)
+            nm = path if isinstance(path, str) else f'{len(path)} 個資料夾'
+            self.win.msg(f'🔁 轉檔：已{"加入" if add else "帶入"}「{nm}」，種類＝{dict(CONV_KINDS).get(self.win.conv.kind, self.win.conv.kind)}；確認數量後按加入')
         except Exception: ENG.log.err('🗺 → 轉檔')
 
 
