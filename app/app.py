@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.24'
+APP_VERSION = '0.6.25'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6196,7 +6196,9 @@ class YieldDlg(QDialog):
         mb = QHBoxLayout(); self.c_mfs = QCheckBox('FusionStitch'); self.c_mcr = QCheckBox('ComfyRemote'); self.c_mtk = QCheckBox('TikLive')
         self.c_mfs.setChecked(P_['members'].get('FusionStitch', True) is not False); self.c_mcr.setChecked(P_['members'].get('ComfyRemote', True) is not False)
         self.c_mtk.setChecked(ENG.cfg.get('yield_tk') is not False)
-        for w_ in (self.c_mtk, self.c_mfs, self.c_mcr): mb.addWidget(w_)
+        self.c_comfy = QCheckBox('🎨 自動看 ComfyUI'); self.c_comfy.setToolTip('問本機 ComfyUI（8188／8000）的佇列：在跑就讓它先，5 分鐘沒進度就不讓'); self.c_comfy.setChecked(ENG.cfg.get('hs_comfy') is not False)
+        self.c_comfy.toggled.connect(lambda on: ENG.cfg.set('hs_comfy', bool(on)))
+        for w_ in (self.c_mtk, self.c_mfs, self.c_mcr, self.c_comfy): mb.addWidget(w_)
         mb.addStretch(1); f.addRow('　☑ 這台有誰', mb)
         self.s_res = QSpinBox(); self.s_res.setRange(0, 50); self.s_res.setSuffix(' %'); self.s_res.setValue(int(P_.get('reserve3', 10))); self.s_res.setToolTip('永遠留給你隨時操作電腦（三個程式合起來最多用 100 − 這個 %）')
         self.s_fc = QSpinBox(); self.s_fc.setRange(10, 95); self.s_fc.setSuffix(' %'); self.s_fc.setValue(int(P_.get('first_cap', 80)))

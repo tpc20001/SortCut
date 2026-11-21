@@ -149,6 +149,7 @@ def yield_api(S, req):
         if 'th_gpu' in d: E.cfg.set('thermal_gpu', max(50, min(95, int(d['th_gpu']))))
         if 'hs_on' in d: E.cfg.set('hs_on', bool(d['hs_on']))                     # V0.6.10 🤝 跟別的程式握手（FusionStitch）
         if 'hs_prio' in d: E.cfg.set('hs_prio', max(0, min(10, int(d['hs_prio']))))
+        if 'hs_comfy' in d: E.cfg.set('hs_comfy', bool(d['hs_comfy']))             # V0.6.25 🎨 自動看 ComfyUI
         try:                                                                    # V0.6.17 握手共用設定（policy3.json，三個程式一起變）
             import vs_yield as VY_; mem = {}
             if isinstance(d.get('hs_members'), dict): mem.update({str(k): bool(v) for k, v in d['hs_members'].items()})

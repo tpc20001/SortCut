@@ -608,10 +608,12 @@ class Yield:
         try:
             if self.hs is None:
                 import app_handshake as HS
-                self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state)
-                if self.cfg('hs_comfy') is not False and hasattr(self.hs, 'watch_comfy'):      # V0.6.21 🎨 自動看本機 ComfyUI 有沒有在跑
-                    self.hs.watch_comfy(lambda: (None if (self.sample or {}).get('gpu') is None else max(0.0, float(self.sample.get('gpu') or 0) - float(self.sample.get('gpu_vs') or 0) - float(self.sample.get('gpu_tk') or 0))))
-                self.hs.start()
+                self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state).start()
+            want_c = self.cfg('hs_comfy') is not False and hasattr(self.hs, 'watch_comfy')     # V0.6.21 🎨 自動看本機 ComfyUI（V0.6.25 可以關）
+            if want_c and self.hs.comfy is None:
+                self.hs.watch_comfy(lambda: (None if (self.sample or {}).get('gpu') is None else max(0.0, float(self.sample.get('gpu') or 0) - float(self.sample.get('gpu_vs') or 0) - float(self.sample.get('gpu_tk') or 0))))
+            elif not want_c and getattr(self.hs, 'comfy', None) is not None:
+                c_ = self.hs.comfy; self.hs.comfy = None; c_.remove()
             d = self.hs.decide(); self.gov.cap_why = ''; self.hs_d = d
             if not self.on or d.get('cpu_cap') is None: return                   # V0.6.17 規則第 4 版：只要有 cpu_cap（整台 CPU 的 %）就照它換成等級
             cap_lv = max(1, min(10, int(math.ceil(float(d['cpu_cap']) / 10.0))))
@@ -732,7 +734,8 @@ class Yield:
         D_ = dict(getattr(self, 'hs_d', None) or {})
         hs_ = {'on': self.cfg('hs_on') is not False, 'prio': int(self.cfg('hs_prio') if self.cfg('hs_prio') is not None else 5), 'mode': D_.get('mode'), 'why': D_.get('why', ''),
                'peers': D_.get('peers') or [], 'alloc': D_.get('alloc') or {}, 'cpu_cap': D_.get('cpu_cap'), 'rules': D_.get('rules'), 'rules_from': D_.get('rules_from'), 'pol': _hs_pol(), 'boost': max(0, int(float(self.cfg('hs_boost_until') or 0) - time.time())), 'me': (self.hs.me if self.hs is not None else {}), 'err': (self.hs.err if self.hs is not None else '')}
-        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'cpu_src': cpu_src, 'hs': hs_, 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
+        cf_ = getattr(self.hs, 'comfy', None) if self.hs is not None else None
+        return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'cpu_src': cpu_src, 'hs': hs_, 'comfy_cfg': self.cfg('hs_comfy') is not False, 'comfy': (dict(cf_.last or {}) if cf_ is not None else None), 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
                 'tk': bool(s.get('tk_seen')), 'tk_link': bool(tk), 'tk_ver': tk.get('ver'), 'tk_rec': tk.get('rec'), 'tk_conv': tk.get('conv'), 'tk_stt': tk.get('stt'),
                 'burst': G.burst, 'max': G.max_level,
                 'use': {k: {'all': f(k), 'tk': f(k + '_tk'), 'vs': f(k + '_vs')} for k in ('cpu', 'gpu', 'enc', 'dec', 'vram')}, 'ram': f('ram'),
