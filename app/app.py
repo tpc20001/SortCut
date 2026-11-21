@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.26'
+APP_VERSION = '0.6.27'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6565,7 +6565,7 @@ class ExplorePage(QWidget):
                       f'<td align="right">{core.fmt_b(x["size"])}</td><td align="right" style="color:#8994a4">{pct:.1f}%・{x["n"]:,} 個</td></tr>')
             return h + '</table>'
         C = j.get('codecs') or []; X = j.get('exts') or []
-        self.mix.setText((f'<b>🎞 影片編碼</b> <span style="color:#8994a4">（H264 越多，轉 H.265 越能省）</span>{bars(C, lambda x: x["codec"].upper())}<br><b>📄 副檔名</b>{bars(X, lambda x: x["ext"])}') if C or X else '<span style="color:#8994a4">這裡沒有影片</span>')
+        self.mix.setText((f'<b>🎞 影片編碼</b> <span style="color:#8994a4">（H264 越多，轉 H.265 越能省）</span>{bars(C, lambda x: x["codec"].upper())}<br><b>📄 副檔名</b>{bars(X, lambda x: x["ext"])}' + (f'<br><b>📅 檔案年份（修改日期）</b>{bars(j.get("ages") or [], lambda x: x["year"])}' if j.get('ages') else '')) if C or X else '<span style="color:#8994a4">這裡沒有影片</span>')
         self.hint.setText('點方塊或按兩下進去・右鍵資料夾 → 🔁 轉檔（H.264→H.265 等，先算好能省多少）／到檔案總管・方塊底下綠線＝能轉的部分')
 
     def _dbl(self, it, _c):

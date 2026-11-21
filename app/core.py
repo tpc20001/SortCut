@@ -5469,14 +5469,16 @@ class Engine:
                     for r in self.db.q(f"SELECT lower(ext), COUNT(*), SUM(size) FROM files WHERE {fw} GROUP BY lower(ext) ORDER BY SUM(size) DESC LIMIT 12", fa)]
             codecs = [{'codec': (r[0] or '').lower() or '（還沒讀）', 'n': int(r[1] or 0), 'size': int(r[2] or 0)}
                       for r in self.db.q(f"SELECT lower(vcodec), COUNT(*), SUM(size) FROM files WHERE {fw} GROUP BY lower(vcodec) ORDER BY SUM(size) DESC LIMIT 8", fa)]
-        except Exception: big, exts, codecs = [], [], []
+            ages = [{'year': str(r[0] or '?'), 'n': int(r[1] or 0), 'size': int(r[2] or 0)}       # V0.6.27 📅 檔案年份（像 TreeSize 的檔案年齡）
+                    for r in self.db.q(f"SELECT strftime('%Y', mtime, 'unixepoch', 'localtime') y, COUNT(*), SUM(size) FROM files WHERE {fw} GROUP BY y ORDER BY y DESC LIMIT 15", fa)]
+        except Exception: big, exts, codecs, ages = [], [], [], []
         hot = []                                                                 # V0.6.24 💡 最值得轉的資料夾（不管第幾層，照「轉完能省」排）
         try:
             hw, ha = (f"{cw} AND (folder=? OR folder LIKE ? ESCAPE '^')", (*ca, eq, lk)) if prefix else (cw, tuple(ca))
             for f, n, b in self.db.q(f"SELECT folder, COUNT(*), SUM(size) FROM files WHERE {hw} GROUP BY folder ORDER BY SUM(size) DESC LIMIT 12", ha):
                 hot.append({'path': f, 'name': str(f).replace('/', '\\').rstrip('\\').rsplit('\\', 1)[-1] or f, 'conv_n': int(n or 0), 'conv_b': int(b or 0), 'save': int((b or 0) * (1 - min(1.0, ratio)))})
         except Exception: hot = []
-        out = {'ok': True, 'prefix': prefix, 'parent': parent, 'items': items, 'here': here, 'tot': tot, 'ratio': ratio, 'sort': sort, 't': time.time(), 'big': big, 'exts': exts, 'codecs': codecs, 'hot': hot}
+        out = {'ok': True, 'prefix': prefix, 'parent': parent, 'items': items, 'here': here, 'tot': tot, 'ratio': ratio, 'sort': sort, 't': time.time(), 'big': big, 'exts': exts, 'codecs': codecs, 'hot': hot, 'ages': ages}
         C[ck] = (time.time(), out)
         if len(C) > 200: C.clear()
         return out
