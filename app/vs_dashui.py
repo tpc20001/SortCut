@@ -99,10 +99,10 @@ function fabFit(){const F=document.getElementById('sysFab'),B=document.querySele
   const hook=()=>{const F=document.getElementById('sysFab');if(F&&!F._ff){F._ff=1;try{new ResizeObserver(go).observe(F)}catch(e){}}go()};[200,800,2000,5000].forEach(x=>setTimeout(hook,x))})();
 // ---------------------------------------------------------------- 🤝 右上角讓路等級（V0.5.71，SortCut／整理共用）
 let LVF=null,LVV=null;
-function lvHTML(){let b='';for(let i=0;i<10;i++)b+=`<i style="height:${5+i}px"></i>`;return `<button type="button" class="lvb" id="lvb" title="🤝 讓路給 TikLive：點一下看詳細"><span class="lvbars">${b}</span><b>Lv–</b></button>`}
+function lvHTML(){let b='';for(let i=0;i<10;i++)b+=`<i style="height:${5+i}px"></i>`;return `<button type="button" class="lvb" id="lvb" title="🧠 智能調速／讓路：點一下看詳細"><span class="lvbars">${b}</span><b>Lv–</b></button>`}
 function lvSet(v){LVV=v;document.querySelectorAll('.lvb').forEach(el=>{const on=v.on!==false;el.classList.toggle('off',!on);el.style.setProperty('--lc',v.col||'#2ecc71');
   el.querySelector('b').textContent=on?((v.alert?'⚡':'')+'Lv'+v.level):'OFF';el.querySelectorAll('.lvbars i').forEach((x,i)=>x.classList.toggle('on',on&&i<v.level));
-  el.title=on?`${v.tk_cfg===false?'🧠 智能調速（不讓 TikLive）':'🤝 讓路'}等級 Lv ${v.level}／10（1＝最讓路、10＝最快）\n${v.why||''}\n點一下看詳細`:'🤝 讓路給 TikLive：關掉了'});
+  el.title=on?`${v.tk_cfg===false?'🧠 智能調速（不讓 TikLive）':'🤝 讓路'}等級 Lv ${v.level}／10（1＝最讓路、10＝最快）\n${v.why||''}\n點一下看詳細`:'🧠 智能調速：關掉了'});
   const m=document.getElementById('lvm');if(m)lvBody(m.firstElementChild)}
 async function lvTick(){if(!LVF)return;try{const v=await LVF();if(v&&v.level!=null)lvSet(v)}catch(e){}}
 function lvStart(fn){LVF=fn;lvTick();setInterval(lvTick,3000)}
@@ -110,10 +110,10 @@ function lvBody(box){const v=LVV||{},U=v.use||{},L=v.L||{},N={cpu:'CPU',gpu:'顯
   const tk=v.tk_cfg===false?'⚪ 這台不讓路給 TikLive（另一台電腦用）：只看整台電腦忙不忙來調速':v.tk_link?`✅ TikLive 已連上（${dzE(v.tk_ver||'')}）：錄影 ${v.tk_rec||0} 間、轉檔 ${v.tk_conv||0}、字幕 ${v.tk_stt?'跑':'沒跑'}`:(v.tk?'🟡 TikLive 有在跑，還沒更新到 TK_V1.0.84（用量測的）':'⚪ 這台沒有看到 TikLive');
   const R=Object.entries(v.R||{}).filter(([k,x])=>x).map(([k,x])=>`${N[k]||k} ${x}%`).join('、')||'沒有';
   const AL=v.alert?`<p style="color:#e5484d"><b>⚡ TikLive 斷電警報（24 小時內 ${v.alert.n24??'?'} 次）</b>：${dzE(v.alert.msg||'')}<br>這邊照做：轉檔／瘦身不開新的、Lv 1、CPU 上限 2%、同時只做 1 個，到 ${new Date((v.alert.until||0)*1000).toLocaleString()}。要提早解除：到 TikLive 按「解除警報」。</p>`:'';
-  box.innerHTML=`<button class="lvx" data-lv="x">✕</button><h3>${v.tk_cfg===false?'🧠 智能調速':'🤝 讓路給 TikLive'}</h3>${AL}<div><span class="lvbig" style="color:${v.col||'#2ecc71'}">Lv ${v.level??'–'}</span> <b>／10</b>
+  box.innerHTML=`<button class="lvx" data-lv="x">✕</button><h3>${v.tk?'🤝 讓路給 TikLive':'🧠 智能調速'}</h3>${AL}<div><span class="lvbig" style="color:${v.col||'#2ecc71'}">Lv ${v.level??'–'}</span> <b>／10</b>
    <span class="lvmu">目標 Lv ${v.target??'–'}・FFmpeg 每秒跑 ${Math.round((v.duty||1)*100)}%</span></div><div>${dzE(v.why||'')}</div>${v.cpu_src&&v.cpu_src.src?`<div class="lvmu">CPU 用${dzE(v.cpu_src.src)}量${v.cpu_src.old!=null&&v.cpu_src.src!=='GetSystemTimes'?`（舊算法是 ${Math.round(v.cpu_src.old)}%，只給你對照）`:''}</div>`:''}<p class="lvmu">${tk}</p>
-   <table><tr><th>項目</th><th>整台</th><th>TikLive</th><th>這邊</th><th>允許 Lv</th></tr>${Object.keys(N).map(k=>`<tr><td>${N[k]}</td><td>${f((U[k]||{}).all)}</td><td>${f((U[k]||{}).tk)}</td><td>${f((U[k]||{}).vs)}</td><td>${L[k]??'—'}</td></tr>`).join('')}
-   <tr><td>RAM</td><td>${f(v.ram)}</td><td></td><td></td><td>${L.ram??'—'}</td></tr><tr><td>NVENC 條數</td><td>${v.nvenc??'—'}／${v.nvenc_limit||8}</td><td></td><td></td><td>${L.nvenc??'—'}</td></tr></table>
+   <table><tr><th>項目</th><th>整台</th>${v.tk?'<th>TikLive</th>':''}<th>這邊</th><th>允許 Lv</th></tr>${Object.keys(N).map(k=>`<tr><td>${N[k]}</td><td>${f((U[k]||{}).all)}</td>${v.tk?`<td>${f((U[k]||{}).tk)}</td>`:''}<td>${f((U[k]||{}).vs)}</td><td>${L[k]??'—'}</td></tr>`).join('')}
+   <tr><td>RAM</td><td>${f(v.ram)}</td>${v.tk?'<td></td>':''}<td></td><td>${L.ram??'—'}</td></tr><tr><td>NVENC 條數</td><td>${v.nvenc??'—'}／${v.nvenc_limit||8}</td>${v.tk?'<td></td>':''}<td></td><td>${L.nvenc??'—'}</td></tr></table>
    <div class="lvrow"><label><input type="checkbox" data-lv="on" ${v.on!==false?'checked':''}> 🧠 智能調速（看 CPU／顯示卡／溫度自己調）</label><label><input type="checkbox" data-lv="tk" ${v.tk_cfg!==false?'checked':''}> 🤝 讓路給 TikLive（這台有跑 TikLive 才勾）</label></div>
    <div class="lvrow"><label>最高 <select data-lv="max">${[...Array(10)].map((_,i)=>`<option ${i+1===(v.max||10)?'selected':''}>${i+1}</option>`).join('')}</select> 級</label>
    <label>NVENC 最多 <select data-lv="nv">${[...Array(15)].map((_,i)=>`<option ${i+2===(v.nvenc_limit||8)?'selected':''}>${i+2}</option>`).join('')}</select> 條</label></div>
@@ -138,7 +138,7 @@ function lvBody(box){const v=LVV||{},U=v.use||{},L=v.L||{},N={cpu:'CPU',gpu:'顯
      <label>這邊先跑 <select data-lv="hs_boost">${[[0,H.boost?'取消':'—'],[30,'30 分'],[60,'1 小時'],[120,'2 小時'],[240,'4 小時']].map(([m,t])=>`<option value="${m}">${t}</option>`).join('')}</select></label></div>
      <p class="lvmu">${P.length?P.map(p=>`🔗 <b>${dzE(p.name||p.app)}</b> V${dzE(p.ver||'')}：${W[p.want||0]||''}${p.what?'（'+dzE(p.what)+'）':''}・優先 ${p.prio??5}`).join('<br>')+'<br>':'⚪ 沒有看到 FusionStitch／ComfyRemote（更新到有握手的版本、而且開著，就會出現在這裡）<br>'}
      ${H.mode?`<b>${M[H.mode]||H.mode}</b>${H.why?'：'+dzE(H.why):''}`:''}${H.boost?`・使用者按了這邊先跑（還剩 ${Math.ceil(H.boost/60)} 分）`:''}${H.err?`<br><span style="color:#e5484d">${dzE(H.err)}</span>`:''}</p>`})()}
-   <p class="lvmu">Lv 是每一項「允許的等級」裡最小的那個。降：馬上；升：每 8 秒最多 +1。Lv 10 也不吃滿：整台 CPU ≤85%、顯示卡 ≤80%、NVENC ≤75%，TikLive 最近 10 分鐘的高峰先空一半（現在保留：${R}）。Lv 2 以下轉檔／瘦身先不開新的（跑到一半的照跑完）。</p>
+   <p class="lvmu">Lv 是每一項「允許的等級」裡最小的那個。降：馬上；升：每 8 秒最多 +1。${v.tk?`Lv 10 也不吃滿：整台 CPU ≤85%、顯示卡 ≤80%、NVENC ≤75%，TikLive 最近 10 分鐘的高峰先空一半（現在保留：${R}）。`:'這台沒有 TikLive：沒人在用電腦（3 分鐘沒碰）就全力跑；有人在用留 10% 給你。'}Lv 2 以下轉檔／瘦身先不開新的（跑到一半的照跑完）。</p>
    ${(v.log||[]).length?`<p class="lvmu"><b>最近變化</b><br>${v.log.map(dzE).join('<br>')}</p>`:''}`}
 function lvOpen(){let m=document.getElementById('lvm');if(m){m.remove();return}m=document.createElement('div');m.className='lvm';m.id='lvm';m.innerHTML='<div></div>';document.body.appendChild(m);lvBody(m.firstElementChild);
   m.addEventListener('click',async e=>{if(e.target===m||e.target.dataset.lv==='x'){m.remove();return}});

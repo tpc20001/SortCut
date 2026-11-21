@@ -40,12 +40,21 @@ import time
 from pathlib import Path
 
 PROTO = 'apphs/1'
-RULES = 4              # 規則版本：改 decide 的規則就加 1（越大越新）
+RULES = 5              # 規則版本：改 decide 的規則就加 1（越大越新）
 EVERY = 2.0            # 幾秒寫一次
 STALE = 10.0           # 幾秒沒更新算不在
 LOSE_CPU = 20.0        # 讓路的那邊：重工作最多用整台 CPU 的 %
 SPLIT_CPU = 45.0       # （第 1 版用的平分上限；第 2 版改成看 policy）
 WANT_TXT = {0: '閒著', 1: '背景小工作', 2: '在做重工作', 3: '使用者在等'}
+# 規則第 5 版（SortCut V0.6.18）：使用者要「CPU／顯示卡不要閒著」
+#   * 🧑‍💻 有人在用電腦（鍵盤／滑鼠 3 分鐘內動過）才留 reserve %；沒人在用 → 大家合起來可以用到 100%。
+#   * 🧊 卡住偵測：優先程式（ComfyRemote）說「在做事」(want≥2)，可是超過 stall_sec（預設 5 分鐘）沒有進度
+#     （它自己寫的 progress_t 沒變；舊版沒寫就看它從什麼時候開始忙），而且這段時間顯示卡也沒有別人在用（ComfyUI 沒在跑）
+#     → 當作卡住：不讓它了，大家回到平常的分配；並在自己的狀態檔寫 nudge＝{'ComfyRemote': 時間} 提醒它（它可以跳過、重試、或回報 want 0）。
+#   * ♻ 用不完的分出去：在做重工作的程式，如果有寫 use.cpu 而且用不到分給它的（差超過 10%），差的那一段分給其他還在做的。
+#   * 新欄位（狀態檔）：idle（鍵盤滑鼠多久沒動，秒）、busy_since（自己從什麼時候開始 want≥2）、progress_t（自己最後一次有進度的時間，程式自己給）、
+#     seen（觀察：{'gpu_hi_t': 最後一次看到顯示卡被「別人」用超過 15% 的時間, 'busy_since': {app: 看到它開始忙的時間}}）、nudge。
+#     舊版的程式不寫這些也照樣能算（缺的就跳過那一項）。
 # 規則第 4 版（SortCut V0.6.17）：以 ComfyRemote V0.3.40 的第 3 版（policy3.json）為準，三邊統一。改的地方：
 #   * 共用設定檔格式不同也不會出錯（policy.json 的 members 有人寫成清單、有人寫成字典；讀不懂就用預設，絕不讓「寫自己的狀態」失敗）
 #     ── 第 3 版時 SortCut 就是因為讀 policy.json 出錯，狀態檔一直沒更新，另外兩個看不到它。
@@ -190,7 +199,7 @@ def decide_with_v2(me, P, pol=None, idle=None):
 
 # ---------------------------------------------------------------- ⚖ 第 3 版：三個程式、勾選誰參與、最優先的程式
 POLICY3_DEFAULT = {'on': True, 'members': [], 'normal': {'FusionStitch': 45, 'SortCut': 45, 'TikLive': 45}, 'reserve': 10,
-                   'boost_app': 'ComfyRemote', 'boost': 80, 'boost_others': 5, 'lv': {}}
+                   'boost_app': 'ComfyRemote', 'boost': 80, 'boost_others': 5, 'lv': {}, 'stall_sec': 300, 'idle_min': 3}
 KNOWN = (('ComfyRemote', 'ComfyRemote'), ('FusionStitch', 'GoPro Fusion 360（FusionStitch）'), ('SortCut', 'SortCut'), ('TikLive', 'TikLive'))
 
 
@@ -212,7 +221,7 @@ def policy3():
     def num(k, lo, hi):
         try: P[k] = max(lo, min(hi, float(P.get(k))))
         except Exception: P[k] = float(POLICY3_DEFAULT[k])
-    num('reserve', 0, 60); num('boost', 10, 95); num('boost_others', 0, 40)
+    num('reserve', 0, 60); num('boost', 10, 95); num('boost_others', 0, 40); num('stall_sec', 60, 3600); num('idle_min', 0.5, 60)
     try: P['lv'] = {str(k): max(1, min(10, int(v))) for k, v in dict(P.get('lv') or {}).items()}
     except Exception: P['lv'] = {}
     P['boost_app'] = str(P.get('boost_app') or ''); P['on'] = P.get('on') is not False
@@ -232,6 +241,48 @@ def set_policy3(by='', **kw):
     try: tmp.write_text(json.dumps(P, ensure_ascii=False), encoding='utf-8'); os.replace(tmp, p)
     except Exception: pass
     return policy3()
+
+
+def _num(x):
+    try: return float(x)
+    except Exception: return None
+
+
+def prep5(states, P3, now=None):
+    """第 5 版的前處理（純函式）：有沒有人在用電腦 → 預算；優先程式是不是卡住了 → 當作沒在忙."""
+    now = time.time() if now is None else now
+    idles = [v for v in (_num(st.get('idle')) for st in states.values()) if v is not None]
+    active = (min(idles) < float(P3.get('idle_min') or 3) * 60) if idles else True
+    budget = 100.0 - float(P3['reserve']) if active else 100.0
+    stall = float(P3.get('stall_sec') or 300); B = P3.get('boost_app') or ''; stalled = []
+    sB = states.get(B)
+    if sB and int(sB.get('want') or 0) >= 2:
+        seen = [st.get('seen') or {} for st in states.values() if isinstance(st.get('seen'), dict)]
+        bs = [_num(sB.get('busy_since'))] + [_num((x.get('busy_since') or {}).get(B)) for x in seen]
+        bs = [v for v in bs if v]
+        ref = _num(sB.get('progress_t')) or (min(bs) if bs else None)
+        gpu_hi = max([_num(x.get('gpu_hi_t')) or 0.0 for x in seen] or [0.0])
+        u = sB.get('use') or {}
+        own_busy = (_num(u.get('gpu')) or 0) > 10 or (_num(u.get('cpu')) or 0) > 10
+        if ref and now - ref > stall and now - gpu_hi > stall and not own_busy: stalled.append(B)
+    S2 = {a: ({**st, 'want': 0} if a in stalled else st) for a, st in states.items()}
+    return S2, budget, active, stalled
+
+
+def conserve5(A, states, budget):
+    """第 5 版：在做重工作的程式用不到分給它的（有寫 use.cpu、差超過 10%）→ 差的那段分給其他還在做的（CPU／顯示卡不要閒著）."""
+    heavy = [a for a, st in states.items() if a in A and int(st.get('want') or 0) >= 2]
+    sur = 0.0; rec = []
+    for a in heavy:
+        u = _num((states[a].get('use') or {}).get('cpu'))
+        if u is not None and A[a]['cap'] - (u + 10.0) > 0: sur += A[a]['cap'] - (u + 10.0)
+        else: rec.append(a)
+    if sur >= 5 and rec:
+        add = sur / len(rec)
+        for a in rec:
+            c = min(budget, A[a]['cap'] + add)
+            if c > A[a]['cap'] + 0.5: A[a] = {**A[a], 'cap': round(c, 1), 'why': A[a]['why'] + f'（別人用不完的 +{c - A[a]["cap"]:.0f}%）'}
+    return A
 
 
 def alloc3(states, P3=None):
@@ -274,14 +325,22 @@ def decide_with(me, P, pol=None, idle=None):
     if M and app not in M: return {**base, 'mode': 'alone', 'peer': '', 'why': '這台電腦的握手沒有勾這個程式（不參與，不受限）'}
     states = {app: me}
     for p in P: states.setdefault(str(p.get('app') or ''), p)
-    A = alloc3(states, P3); mine = A.get(app) or {'cap': 100.0 - P3['reserve'], 'mode': 'alone', 'why': ''}
+    states, budget5, active5, stalled5 = prep5(states, P3)                      # 第 5 版：沒人在用 → 預算 100；優先程式卡住 → 不讓它
+    P3x = {**P3, 'reserve': 100.0 - budget5}
+    A = conserve5(alloc3(states, P3x), states, budget5)
+    if stalled5:
+        for a_, v_ in A.items():
+            if a_ in stalled5: A[a_] = {**v_, 'why': f'說在忙，可是 {P3.get("stall_sec", 300) / 60:.0f} 分鐘沒有進度、顯示卡也沒在跑 → 當作卡住，大家不讓它了'}
+    base.update(budget=round(budget5, 1), user_active=active5, stalled=stalled5)
+    mine = A.get(app) or {'cap': budget5, 'mode': 'alone', 'why': ''}
     others = [p for p in P if (not M or str(p.get('app')) in M)]
     top = max(others, key=lambda p: int(p.get('want') or 0), default=None)
     mx_nv = int((me.get('max') or {}).get('nvenc') or (top or {}).get('max', {}).get('nvenc') or 8)
     cap = float(mine['cap'])
     return {**base, 'mode': mine['mode'], 'peer': (top.get('name') or top.get('app')) if top else '', 'peer_want': int(top.get('want') or 0) if top else 0,
             'peer_what': (top or {}).get('what', ''), 'cpu_cap': cap, 'share': cap, 'nvenc_cap': max(1, int(round(mx_nv * cap / 100.0))),
-            'no_new_heavy': mine['mode'] == 'yield' and P3['boost_app'] in A and A[P3['boost_app']].get('mode') == 'lead', 'why': mine['why'], 'alloc': {a: v['cap'] for a, v in A.items()}}
+            'no_new_heavy': mine['mode'] == 'yield' and P3['boost_app'] in A and A[P3['boost_app']].get('mode') == 'lead',
+            'why': (mine['why'] + (f'；{"、".join(stalled5)} 好像卡住了（沒進度），先不讓它' if stalled5 and app not in stalled5 else '')), 'alloc': {a: v['cap'] for a, v in A.items()}}
 
 
 # ---------------------------------------------------------------- 🆙 誰新就用誰的規則
@@ -347,12 +406,35 @@ class Handshake:
                 'want': max(0, min(3, int(S.get('want') or 0))), 'prio': max(0, min(10, int(S.get('prio') if S.get('prio') is not None else 5))),
                 'what': str(S.get('what') or '')[:120], 'use': dict(S.get('use') or {}), 'max': dict(S.get('max') or {}),
                 'rules': int(getattr(m, 'RULES', RULES)) if m else RULES, 'rules_own': RULES, 'lv': S.get('lv'),
+                **self._obs5(S),
                 'mode': self._mode_safe()}
+
+    def _obs5(self, S):
+        """第 5 版的觀察欄位（給大家判斷「有沒有人在用電腦」「優先程式是不是卡住」）."""
+        now = time.time(); O = getattr(self, '_o5', None)
+        if O is None: O = self._o5 = {'busy_since': 0.0, 'gpu_hi_t': 0.0, 'peer_busy': {}, 'nudge': {}}
+        w = int(S.get('want') or 0)
+        if w >= 2: O['busy_since'] = O['busy_since'] or now
+        else: O['busy_since'] = 0.0
+        g = _num(S.get('gpu_other'))                                             # 程式自己量的：整台顯示卡（3D／Compute）扣掉自己用的
+        if g is not None and g >= 15: O['gpu_hi_t'] = now
+        for a, p in list(self.others.items()):
+            if int(p.get('want') or 0) >= 2: O['peer_busy'][a] = O['peer_busy'].get(a) or now
+            else: O['peer_busy'].pop(a, None)
+        try:
+            D = getattr(self, '_last_d', None) or {}
+            for a in D.get('stalled') or []: O['nudge'][a] = O['nudge'].get(a) or now     # 提醒卡住的那個（它自己決定跳過／重試／回報沒在忙）
+            for a in list(O['nudge']):
+                if a not in (D.get('stalled') or []): O['nudge'].pop(a, None)
+        except Exception: pass
+        out = {'idle': idle_seconds(), 'busy_since': O['busy_since'] or None, 'seen': {'gpu_hi_t': O['gpu_hi_t'] or None, 'busy_since': dict(O['peer_busy'])}, 'nudge': dict(O['nudge'])}
+        if S.get('progress_t'): out['progress_t'] = _num(S.get('progress_t'))
+        return out
 
     def _mode_safe(self):
         """第 4 版：算規則出錯也要能寫出自己的狀態（不然別人會以為你沒開）."""
         if not self.me: return 'alone'
-        try: return self.decide().get('mode') or 'alone'
+        try: d = self.decide(); self._last_d = d; return d.get('mode') or 'alone'
         except Exception as ex: self.err = f'算規則出錯（照樣寫狀態）：{ex}'[:160]; return 'alone'
 
     def write(self):

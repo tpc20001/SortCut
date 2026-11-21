@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.17'
+APP_VERSION = '0.6.18'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6129,7 +6129,7 @@ class LvBadge(QWidget):
         tip = [f"🤝 讓路等級 Lv {v.get('level')}／10（1＝最讓路，10＝最快）", str(v.get('why') or '')]
         if v.get('tk'): tip.append('TikLive：' + ('已連上（' + str(v.get('tk_ver') or '') + '）' if v.get('tk_link') else '有在跑（還沒更新到 1.0.84，用量測的）'))
         else: tip.append('這台沒有看到 TikLive')
-        if not v.get('on'): tip = ['🤝 讓路給 TikLive：關掉了（點一下打開）']
+        if not v.get('on'): tip = ['🧠 智能調速：關掉了（點一下打開）']
         if v.get('alert'): tip.insert(0, '⚡ TikLive 斷電警報：' + str((v['alert'] or {}).get('msg') or ''))
         tip.append('點一下看詳細、改設定'); self.setToolTip('\n'.join(tip))
         if old != (v.get('level'), v.get('on'), v.get('tk'), bool(v.get('alert'))): self.update()
@@ -6230,7 +6230,8 @@ class YieldDlg(QDialog):
                          + (lambda c_: f"<br><span style='color:#8994a4'>CPU 用{c_.get('src') or '—'}量" + (f"（舊算法是 {float(c_['old']):.0f}%，只給你對照）" if c_.get('old') is not None and c_.get('src') != 'GetSystemTimes' else '') + '</span>')(V.get('cpu_src') or {}))
         U = V.get('use') or {}; N = {'cpu': 'CPU', 'gpu': '顯示卡', 'enc': '顯示卡編碼（NVENC）', 'dec': '顯示卡解碼', 'vram': '顯示卡記憶體'}
         fm = lambda x: '—' if x is None else f'{x:.0f}%'
-        rows = ''.join(f"<tr><td>{N[k]}</td><td align=right>{fm((U.get(k) or {}).get('all'))}</td><td align=right>{fm((U.get(k) or {}).get('tk'))}</td>"
+        TKC = bool(V.get('tk'))                                                   # V0.6.18 這台真的有看到 TikLive 才寫 TikLive（不然會誤會）
+        rows = ''.join(f"<tr><td>{N[k]}</td><td align=right>{fm((U.get(k) or {}).get('all'))}</td>" + (f"<td align=right>{fm((U.get(k) or {}).get('tk'))}</td>" if TKC else '') +
                        f"<td align=right>{fm((U.get(k) or {}).get('vs'))}</td><td align=right>{(V.get('L') or {}).get(k, '—')}</td></tr>" for k in N)
         tk = ('✅ TikLive 已連上（' + str(V.get('tk_ver') or '') + f"）：錄影 {V.get('tk_rec') or 0} 間、轉檔 {V.get('tk_conv') or 0}、字幕 {'跑' if V.get('tk_stt') else '沒跑'}") if V.get('tk_link') else (
             '🟡 TikLive 有在跑，但還沒更新到 TK_V1.0.84：用量測的（量得到它整串程式用多少，只是不知道它「等一下要開始做什麼」）' if V.get('tk') else '⚪ 這台沒有看到 TikLive')
@@ -6240,11 +6241,12 @@ class YieldDlg(QDialog):
                if P_ else '<br>⚪ 沒有看到 FusionStitch／ComfyRemote（更新到有握手的版本、而且開著，就會出現）')
         if H_.get('alloc'): tk += '<br>現在分配：' + '・'.join(f"<b>{esc_html(a)}</b> {c}%" for a, c in H_['alloc'].items()) + (f"（這邊重工作最多 {H_['cpu_cap']}%）" if H_.get('cpu_cap') is not None else '') + f"・規則第 {H_.get('rules') or '?'} 版"
         if H_.get('mode'): tk += f"<br><b>{M_.get(H_['mode'], H_['mode'])}</b>" + (f"：{esc_html(H_.get('why'))}" if H_.get('why') else '') + (f"・這邊先跑還剩 {-(-int(H_['boost']) // 60)} 分" if H_.get('boost') else '')
-        h = (f"<p>{tk}</p><table cellspacing=0 cellpadding=3 width=100%><tr><th align=left>項目</th><th align=right>整台</th><th align=right>TikLive</th><th align=right>這邊</th><th align=right>這項允許 Lv</th></tr>{rows}"
-             f"<tr><td>RAM</td><td align=right>{fm(V.get('ram'))}</td><td></td><td></td><td align=right>{(V.get('L') or {}).get('ram', '—')}</td></tr>"
-             f"<tr><td>NVENC 條數</td><td align=right>{V.get('nvenc') if V.get('nvenc') is not None else '—'}／{V.get('nvenc_limit')}</td><td></td><td></td><td align=right>{(V.get('L') or {}).get('nvenc', '—')}</td></tr></table>"
+        h = (f"<p>{tk}</p><table cellspacing=0 cellpadding=3 width=100%><tr><th align=left>項目</th><th align=right>整台</th>{'<th align=right>TikLive</th>' if TKC else ''}<th align=right>這邊</th><th align=right>這項允許 Lv</th></tr>{rows}"
+             f"<tr><td>RAM</td><td align=right>{fm(V.get('ram'))}</td>{'<td></td>' if TKC else ''}<td></td><td align=right>{(V.get('L') or {}).get('ram', '—')}</td></tr>"
+             f"<tr><td>NVENC 條數</td><td align=right>{V.get('nvenc') if V.get('nvenc') is not None else '—'}／{V.get('nvenc_limit')}</td>{'<td></td>' if TKC else ''}<td></td><td align=right>{(V.get('L') or {}).get('nvenc', '—')}</td></tr></table>"
              f"<p style='color:#8994a4'>Lv 是「每一項允許的等級」裡最小的那個。降：馬上；升：每 8 秒最多 +1、剛降過 20 秒內不升。"
-             f"Lv 10 也不會吃滿：整台加起來 CPU ≤85%、顯示卡 ≤80%、NVENC ≤75%，而且 TikLive 最近 10 分鐘的高峰先空一半給它（現在保留：{', '.join(f'{N.get(k, k)} {x}%' for k, x in (V.get('R') or {}).items() if x) or '沒有'}）。"
+             + (f"Lv 10 也不會吃滿：整台加起來 CPU ≤85%、顯示卡 ≤80%、NVENC ≤75%，而且 TikLive 最近 10 分鐘的高峰先空一半給它（現在保留：{', '.join(f'{N.get(k, k)} {x}%' for k, x in (V.get('R') or {}).items() if x) or '沒有'}）。" if TKC else
+                "這台沒有 TikLive：沒人在用電腦（3 分鐘沒碰鍵盤滑鼠）就全力跑到 99%；有人在用就留 10% 給你。") +
              f"Lv 2 以下轉檔／瘦身先不開新的（跑到一半的照跑完）；同時做幾個也跟著等級。</p>")
         T = V.get('th') or {}; A_ = V.get('alert')
         if A_: h = (f"<p style='color:#e5484d'><b>⚡ TikLive 斷電警報（24 小時內斷電 {A_.get('n24', '?')} 次）</b>：{A_.get('msg', '')}<br>"

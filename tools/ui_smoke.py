@@ -1,0 +1,63 @@
+"""雲端打包前的電腦版畫面測試（GitHub Actions 的 Windows 上跑，QT_QPA_PLATFORM=offscreen）.
+
+真的把 SortCut 主視窗開起來：每一頁都切一次、打開讓路視窗、轉檔工作區各分頁，跑幾秒讓計時器動一動。
+任何一個地方丟出錯誤（包含按鈕／計時器裡的錯誤）→ 測試失敗 → 這版不會發出去（不會把壞掉的版本推給使用者）。
+"""
+import os
+import sys
+import tempfile
+import time
+import traceback
+from pathlib import Path
+
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+os.environ['VIDEOSIFT_SELFTEST'] = '1'
+KIT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(KIT / 'app'))
+ERR = []
+_old = sys.excepthook
+sys.excepthook = lambda t, v, tb: ERR.append(''.join(traceback.format_exception(t, v, tb)))
+
+
+def pump(sec):
+    from PySide6.QtWidgets import QApplication
+    t = time.time() + sec
+    while time.time() < t: QApplication.processEvents(); time.sleep(0.02)
+
+
+def step(name, fn):
+    try: fn(); pump(0.3); print('  ✔', name, flush=True)
+    except Exception: ERR.append(f'{name}\n{traceback.format_exc()}'); print('  ✖', name, flush=True)
+
+
+def main():
+    from PySide6.QtWidgets import QApplication
+    import app as A
+    import core
+    qa = QApplication.instance() or QApplication(sys.argv)
+    root = Path(tempfile.mkdtemp()); (root / 'Data').mkdir(); (root / 'LOG').mkdir(); (root / 'UPDATE').mkdir()
+    A.ROOT = root
+    A.BUS = A.Bus(); A.LOADER = A.ImgLoader(); A.ENG = core.Engine(root, version=A.APP_VERSION); qa._vs_eng = A.ENG
+    w = A.Main(); w.show(); qa._vs_main = w; pump(2.0)
+    w.outer.setCurrentIndex(1)
+    for pg in list(A.NavList.NAMES):
+        step(f'頁面 {pg} {A.NavList.NAMES[pg][1]}', lambda pg=pg: w._page(pg))
+    step('封存頁（Ctrl+Shift+R）', w.open_archive)
+    def yd():
+        d = A.YieldDlg(w); d.show(); pump(1.0); d.load(); d.close()
+    step('讓路視窗', yd)
+    if hasattr(w, 'conv') and hasattr(w.conv, 'tabs'):
+        for i in range(w.conv.tabs.count()): step(f'轉檔分頁 {i}', lambda i=i: w.conv.tabs.setCurrentIndex(i))
+    for nm in ('explore',):
+        if hasattr(w, nm): step(f'{nm}', lambda nm=nm: getattr(w, nm).refresh() if hasattr(getattr(w, nm), 'refresh') else None)
+    pump(3.0)
+    try:
+        w.quitting = True; w.close(); pump(0.5); A.ENG.shutdown() if hasattr(A.ENG, 'shutdown') else None
+    except Exception: pass
+    if ERR:
+        print('\n========== 畫面測試失敗 ==========\n' + '\n----------\n'.join(ERR[:20]), flush=True); os._exit(1)
+    print('UI SMOKE OK', flush=True); os._exit(0)
+
+
+if __name__ == '__main__':
+    main()

@@ -75,9 +75,11 @@ class Gov:
     def step(self, s, now=None):
         now = time.time() if now is None else now
         tk = s.get('tk') or {}; tk_on = bool(s.get('tk_seen') or tk)
-        self._learn(s); R = self._tk_reserve(s, now); L = {}; why = {}
+        self._learn(s); R = self._tk_reserve(s, now) if tk_on else {}; L = {}; why = {}
+        idle = s.get('idle'); away = idle is not None and float(idle) >= 180                # V0.6.18 使用者 3 分鐘沒碰電腦＝不在用
+        self.away = away
         for k, cap in CAPS.items():
-            if not tk_on: cap = min(95.0, cap + 10.0)                                       # 這台沒有 TikLive：只要不把電腦吃滿就好
+            if not tk_on: cap = 99.0 if away else 90.0                                      # V0.6.18 沒有 TikLive：沒人在用就全力跑；有人在用留 10% 給你
             sysv = s.get(k)
             if sysv is None: continue
             vs = float(s.get(k + '_vs') or 0)
@@ -106,8 +108,9 @@ class Gov:
         ns = s.get('nvenc_used')
         if ns is not None:
             free = self.nvenc_limit - int(ns)                                                  # 總條數（已經含這邊的）
-            L['nvenc'] = 10 if free >= 4 else (6 if free >= 3 else (3 if free >= 2 else 1))
-            if L['nvenc'] < 10: why['nvenc'] = f'NVENC 只剩 {max(0, free)} 條（上限 {self.nvenc_limit}，留 2 條給 TikLive）'
+            if tk_on: L['nvenc'] = 10 if free >= 4 else (6 if free >= 3 else (3 if free >= 2 else 1))
+            else: L['nvenc'] = 10 if free >= 1 else 1                                       # V0.6.18 沒有 TikLive：不用替它留條數
+            if L['nvenc'] < 10: why['nvenc'] = f'NVENC 只剩 {max(0, free)} 條（上限 {self.nvenc_limit}' + ('，留 2 條給 TikLive）' if tk_on else '）')
         tgt = min(L.values()) if L else 10; tgt = min(tgt, self.max_level); bound = min(L, key=L.get) if L else ''
         bt = float(tk.get('burst_until') or 0)
         self.burst = bt > now
@@ -124,7 +127,7 @@ class Gov:
             if now - self.t_drop >= self.RISE_COOL and now - self.t_hi >= self.RISE_EVERY and now - self.t_rise >= self.RISE_EVERY:
                 self.level += 1; self.t_rise = now                                         # 升：每 8 秒最多 +1
         else: self.t_hi = 0.0
-        if self.level >= 10: self.why = '電腦還很空：全速（每一項仍留一段給 TikLive，不會吃滿）'
+        if self.level >= 10: self.why = ('電腦還很空：全速（每一項仍留一段給 TikLive，不會吃滿）' if tk_on else ('沒人在用電腦：全力跑' if away else '全速（留 10% 給你操作電腦）'))
         elif bound in why: self.why = why[bound]
         elif self.level >= self.max_level and self.max_level < 10: self.why = getattr(self, 'cap_why', '') or f'你設定最高 Lv {self.max_level}'
         elif self.level < tgt: self.why = f'慢慢加速中（目標 Lv {tgt}）'
@@ -390,7 +393,7 @@ class Yield:
         D_ = getattr(self, 'hs_d', None) or {}
         if kind in ('conv', 'slim', 'enc') and D_.get('no_new_heavy'): return f'🤝 {D_.get("why", "")}：轉檔／瘦身先不開新的，跑到一半的照跑（慢慢跑）'   # V0.6.10 握手
         if kind in ('conv', 'slim', 'enc') and self.gov.level <= 2 and self.tk_pids: return f'🤝 讓路給 TikLive（Lv {self.gov.level}）：轉檔／瘦身先不開新的，跑到一半的照跑完　{self.gov.why}'   # V0.5.78 不再暫停 FFmpeg，改成低等級時不開新的
-        if kind in ('conv', 'slim', 'enc') and (self.gov.detail.get('L') or {}).get('nvenc', 10) <= 1: return '🤝 NVENC 條數不夠，留給 TikLive'
+        if kind in ('conv', 'slim', 'enc') and (self.gov.detail.get('L') or {}).get('nvenc', 10) <= 1: return '🤝 NVENC 條數不夠' + ('，留給 TikLive' if self.tk_pids else '（顯示卡的編碼條數用完了）')
         H = getattr(self, 'heat', None)
         if H is not None and kind in ('conv', 'slim', 'enc'):
             w_ = H.hold(kind)
@@ -530,6 +533,8 @@ class Yield:
             if s.get('_vram_t'):
                 s['vram_vs'] = 100.0 * vb.get('vs', 0) / s['_vram_t']; s['vram_tk'] = 100.0 * vb.get('tk', 0) / s['_vram_t']
         s['disk'] = W.disks(); s['vs_drives'] = self._vs_drives()
+        try: import app_handshake as HS_; s['idle'] = HS_.idle_seconds()          # V0.6.18 使用者多久沒碰電腦（沒在用就全力跑）
+        except Exception: s['idle'] = None
         try: s['disk_rw'] = W.disk_rw()
         except Exception: s['disk_rw'] = {}
         s['tk_drives'] = {str(x).upper()[:2] for x in (tk or {}).get('drives') or [] if len(str(x)) >= 2}
@@ -596,7 +601,8 @@ class Yield:
         return {'on': self.cfg('hs_on') is not False, 'want': want, 'prio': int(self.cfg('hs_prio') if self.cfg('hs_prio') is not None else 5), 'what': what,
                 'use': {'cpu': round(float(s.get('cpu_vs') or 0), 1), 'gpu': round(float(s.get('gpu_vs') or 0), 1), 'nvenc': int(len(self.media) and (s.get('nvenc_used') or 0)),
                         'disks': sorted(s.get('vs_drives') or [])},
-                'max': {'nvenc': int(self.gov.nvenc_limit or 8)}}
+                'max': {'nvenc': int(self.gov.nvenc_limit or 8)},
+                'gpu_other': (max(0.0, float(s.get('gpu') or 0) - float(s.get('gpu_vs') or 0)) if s.get('gpu') is not None else None)}   # V0.6.18 給「卡住偵測」：顯示卡有沒有別人在用
 
     def _handshake(self):
         try:

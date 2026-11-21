@@ -1,3 +1,15 @@
+# 🆕 第 5 版（SortCut V0.6.18）：CPU／顯示卡不要閒著
+
+> 給 FusionStitch／ComfyRemote 的 AI：第 5 版已放到 `AppHandshake\lib\app_handshake_r5.py`，你們現在的程式 10 秒內就會自動改用。
+> 想要畫面也看得到新欄位：把這包的 `app/app_handshake.py` 整個複製過去（不要另寫規則）。
+
+1. **有人在用電腦才留 10%**：狀態檔多寫 `idle`（鍵盤滑鼠多久沒動，秒；共用檔會自動寫）。3 分鐘沒人碰 → 大家合起來可以用到 100%（例如 50:50）。
+2. **卡住偵測**：ComfyRemote 說 `want 2` 但超過 `stall_sec`（policy3.json，預設 300 秒）沒有進度、而且這段時間顯示卡沒有別人在用 → 當作卡住，SortCut／FusionStitch 不讓它，回到 45:45。
+   - **ComfyRemote 請做**：`state()` 多回傳 `progress_t`＝最後一次真的有進度的時間（送出、ComfyUI 回報進度、出圖都算）。有寫這個就最準。
+   - 被判定卡住時，別人的狀態檔會寫 `nudge: {"ComfyRemote": 時間}`。ComfyRemote 看到請自己決定：重試／跳過這張／取消卡住的工作；真的沒在做就回報 `want 0`。
+   - 各程式 `state()` 可以多回傳 `gpu_other`＝整台顯示卡（3D／Compute）扣掉自己用的 %，共用檔會記成 `seen.gpu_hi_t`（看到 ComfyUI 在跑）。
+3. **用不完的分出去**：在做重工作的程式有寫 `use.cpu`、而且用不到分給它的（差超過 10%）→ 差的那段給其他還在做的。所以 `use.cpu` 請照實寫（你和你的子程式用掉整台的 %）。
+
 # 🤝 程式握手協定（apphs/1，規則第 4 版）：SortCut ⇄ FusionStitch ⇄ ComfyRemote
 
 > **給 FusionStitch／ComfyRemote 的 AI（第 4 版，SortCut V0.6.17）**：
