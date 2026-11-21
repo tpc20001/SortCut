@@ -610,7 +610,7 @@ class Yield:
                 import app_handshake as HS
                 self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state).start()
             want_c = self.cfg('hs_comfy') is not False and hasattr(self.hs, 'watch_comfy')     # V0.6.21 🎨 自動看本機 ComfyUI（V0.6.25 可以關）
-            if want_c and self.hs.comfy is None:
+            if want_c and getattr(self.hs, 'comfy', None) is None:
                 self.hs.watch_comfy(lambda: (None if (self.sample or {}).get('gpu') is None else max(0.0, float(self.sample.get('gpu') or 0) - float(self.sample.get('gpu_vs') or 0) - float(self.sample.get('gpu_tk') or 0))))
             elif not want_c and getattr(self.hs, 'comfy', None) is not None:
                 c_ = self.hs.comfy; self.hs.comfy = None; c_.remove()
