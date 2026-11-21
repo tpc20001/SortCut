@@ -54,7 +54,10 @@ jobs:
         timeout-minutes: 8
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python tools/ui_smoke.py
+        run: |
+          python tools/ui_smoke.py
+          if ((Get-Content smoke_result.txt -ErrorAction SilentlyContinue) -ne 'UI SMOKE OK') { Write-Error '畫面測試沒過'; exit 1 }
+          exit 0
       - name: 打包 EXE（外殼）
         run: >
           python -m PyInstaller --noconfirm --clean --onedir --windowed --name VideoSift --icon "${{ github.workspace }}\VideoSift.ico"

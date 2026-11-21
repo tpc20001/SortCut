@@ -75,6 +75,8 @@ def main():
     try:
         w.quitting = True; w.close(); pump(0.5); A.ENG.shutdown() if hasattr(A.ENG, 'shutdown') else None
     except Exception: pass
+    res = KIT / 'smoke_result.txt'                                              # Windows 上結束碼有時被別的執行緒蓋掉：結果另外寫檔，雲端看這個檔
+    res.write_text('FAIL' if ERR else 'UI SMOKE OK', encoding='utf-8')
     if ERR:
         print('\n========== 畫面測試失敗 ==========\n' + '\n----------\n'.join(ERR[:20]), flush=True); os._exit(1)
     print('UI SMOKE OK', flush=True); os._exit(0)
