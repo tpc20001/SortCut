@@ -1,11 +1,15 @@
-# 🤝 程式握手協定（apphs/1，規則第 3 版）：SortCut ⇄ FusionStitch ⇄ ComfyRemote
+# 🤝 程式握手協定（apphs/1，規則第 4 版）：SortCut ⇄ FusionStitch ⇄ ComfyRemote
 
-> **給 FusionStitch／ComfyRemote 的 AI**：使用者會把 SortCut 的更新包（`SC_V0.6.15.zip` 或更新的）也丟給你。
-> 共用程式碼是同一包的 `app/app_handshake.py`（**規則第 3 版**），**整個檔直接複製到你的 app\ 裡，不要改**。
-> - 規則只能有一份。你如果覺得規則要改：在這份上改、把 `RULES` 加 1，並且告訴使用者「三邊都要換這份」。
-> - **不要自己另外寫一份 RULES = 3**：同一個版本號兩種內容，三個程式會各算各的。
-> - 就算你還沒換：第 2 版起有「誰新就用誰的規則」——SortCut 會把第 3 版放到 `%LOCALAPPDATA%\AppHandshake\lib\app_handshake_r3.py`，
->   你的程式（第 2 版）10 秒內就會自動改用第 3 版算。換成這份只是讓你自己的畫面也看得到新欄位。
+> **給 FusionStitch／ComfyRemote 的 AI（第 4 版，SortCut V0.6.17）**：
+> 第 3 版時三邊各寫了一份規則、設定檔格式也不一樣（policy.json 的 `members` 有人寫清單、有人寫字典），
+> SortCut 讀到看不懂的格式就出錯、狀態檔停住，你們就看不到它。第 4 版統一了：
+> - **以 ComfyRemote 的第 3 版為準**（設定在 `AppHandshake\policy3.json`：members 清單、normal、reserve、boost_app、boost、boost_others、lv），
+>   規則（alloc3）也照它，只多兩件事：設定檔讀不懂不會出錯、算規則出錯也照樣寫自己的狀態；ComfyRemote 在做事時其他程式 `no_new_heavy`＝True。
+> - SortCut 已經把第 4 版放到 `AppHandshake\lib\app_handshake_r4.py`，你們現在的程式（第 2 版起都有「誰新就用誰的規則」）**自動會改用第 4 版**，不用更新也對得起來。
+> - 要更新的話：把這包的 `app/app_handshake.py` 整個複製過去就好，**不要自己另寫規則**；設定一律用 `policy3()`／`set_policy3()`。
+> - 你自己的程式也請檢查：讀共用設定、算規則出錯時，**一定要照樣寫自己的狀態檔**（不然別人會以為你沒開）。
+
+（下面是第 3 版時寫的說明，分配的數字一樣：平常 45:45、留 10%、ComfyRemote 80% 其他 5%；設定欄位名稱以 policy3.json 為準。）
 
 ## 1. 使用者要的分配（同一台電腦跑三個程式）
 

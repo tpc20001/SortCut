@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.16'
+APP_VERSION = '0.6.17'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6179,17 +6179,17 @@ class YieldDlg(QDialog):
         hb = QHBoxLayout(); self.b_hb = QPushButton('⏩ 這邊先跑 1 小時'); self.b_hc = QPushButton('取消'); hb.addWidget(self.b_hb); hb.addWidget(self.b_hc); hb.addStretch(1); f.addRow('　', hb)
         self.b_hb.clicked.connect(lambda: (ENG.cfg.set('hs_boost_until', time.time() + 3600), ENG.log.w('🤝 握手：使用者按了「這邊先跑 1 小時」'), self.load()))
         self.b_hc.clicked.connect(lambda: (ENG.cfg.set('hs_boost_until', 0), self.load()))
-        try: import app_handshake as HS_; P_ = HS_.policy(); S_ = P_.get('share') or {}                                     # V0.6.15 三個程式共用的設定
-        except Exception: HS_ = None; P_ = {}; S_ = {}
+        try: P_ = __import__('vs_yield')._hs_pol(); P_['members']                                                         # V0.6.17 三個程式共用的設定（policy3.json）
+        except Exception: P_ = {'members': {}}
         mb = QHBoxLayout(); self.c_mfs = QCheckBox('FusionStitch'); self.c_mcr = QCheckBox('ComfyRemote'); self.c_mtk = QCheckBox('TikLive')
-        self.c_mfs.setChecked((P_.get('members') or {}).get('FusionStitch', True) is not False); self.c_mcr.setChecked((P_.get('members') or {}).get('ComfyRemote', True) is not False)
+        self.c_mfs.setChecked(P_['members'].get('FusionStitch', True) is not False); self.c_mcr.setChecked(P_['members'].get('ComfyRemote', True) is not False)
         self.c_mtk.setChecked(ENG.cfg.get('yield_tk') is not False)
         for w_ in (self.c_mtk, self.c_mfs, self.c_mcr): mb.addWidget(w_)
         mb.addStretch(1); f.addRow('　☑ 這台有誰', mb)
         self.s_res = QSpinBox(); self.s_res.setRange(0, 50); self.s_res.setSuffix(' %'); self.s_res.setValue(int(P_.get('reserve3', 10))); self.s_res.setToolTip('永遠留給你隨時操作電腦（三個程式合起來最多用 100 − 這個 %）')
         self.s_fc = QSpinBox(); self.s_fc.setRange(10, 95); self.s_fc.setSuffix(' %'); self.s_fc.setValue(int(P_.get('first_cap', 80)))
         self.s_yc = QSpinBox(); self.s_yc.setRange(1, 30); self.s_yc.setSuffix(' %'); self.s_yc.setValue(int(P_.get('yield_cap', 5)))
-        self.s_sh = QSpinBox(); self.s_sh.setRange(10, 90); self.s_sh.setSuffix(' %'); self.s_sh.setValue(round(100 * float(S_.get('SortCut', 50)) / max(1.0, float(S_.get('SortCut', 50)) + float(S_.get('FusionStitch', 50)))))
+        self.s_sh = QSpinBox(); self.s_sh.setRange(10, 90); self.s_sh.setSuffix(' %'); self.s_sh.setValue(int(P_.get('share_sc', 50)))
         self.s_sh.setToolTip('兩個都在轉檔時：SortCut 佔幾 %（剩下給 FusionStitch），再乘上 100 − 留給你的 %')
         rr = QHBoxLayout()
         for lb_, w_ in (('留給你', self.s_res), ('ComfyRemote 優先時拿', self.s_fc), ('其他降到', self.s_yc), ('平常 SortCut 佔', self.s_sh)): rr.addWidget(QLabel(lb_)); rr.addWidget(w_)
@@ -6205,11 +6205,11 @@ class YieldDlg(QDialog):
     def _save_pol(self, *_a):
         """V0.6.15 三個程式共用的設定（存在 AppHandshake\\policy.json，三邊一起變）."""
         try:
-            import app_handshake as HS_
+            import vs_yield as VY_
             if self.c_mtk.isChecked() != (ENG.cfg.get('yield_tk') is not False): ENG.cfg.set('yield_tk', bool(self.c_mtk.isChecked())); self.c_tk.setChecked(self.c_mtk.isChecked())
-            HS_.set_policy('SortCut', members={'FusionStitch': self.c_mfs.isChecked(), 'ComfyRemote': self.c_mcr.isChecked()}, reserve3=int(self.s_res.value()),
-                           first_cap=int(self.s_fc.value()), yield_cap=int(self.s_yc.value()), share={'SortCut': int(self.s_sh.value()), 'FusionStitch': 100 - int(self.s_sh.value())})
-            ENG.log.w('🤝 握手共用設定：' + str(HS_.policy().get('members')))
+            pk = VY_.hs_set_pol(members={'FusionStitch': self.c_mfs.isChecked(), 'ComfyRemote': self.c_mcr.isChecked(), 'TikLive': self.c_mtk.isChecked()}, reserve3=int(self.s_res.value()),
+                                first_cap=int(self.s_fc.value()), yield_cap=int(self.s_yc.value()), share_sc=int(self.s_sh.value()))
+            ENG.log.w(f'🤝 握手共用設定：{pk}')
         except Exception: ENG.log.err('🤝 握手共用設定')
 
     def _save(self, *_):

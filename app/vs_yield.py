@@ -603,13 +603,8 @@ class Yield:
             if self.hs is None:
                 import app_handshake as HS
                 self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state).start()
-            import app_handshake as HS
-            d = self.hs.decide(); self.gov.cap_why = ''
-            try:
-                if not HS.member('SortCut', HS.policy()): d = {**d, 'mode': 'alone', 'cpu_cap': None, 'nvenc_cap': None, 'no_new_heavy': False, 'why': '「這台有誰」沒有勾 SortCut'}
-            except Exception: pass
-            self.hs_d = d
-            if not self.on or d.get('cpu_cap') is None or d.get('mode') == 'alone': return     # V0.6.15 規則第 3 版：照 cpu_cap（整台 CPU 的 %）換成等級
+            d = self.hs.decide(); self.gov.cap_why = ''; self.hs_d = d
+            if not self.on or d.get('cpu_cap') is None: return                   # V0.6.17 規則第 4 版：只要有 cpu_cap（整台 CPU 的 %）就照它換成等級
             cap_lv = max(1, min(10, int(math.ceil(float(d['cpu_cap']) / 10.0))))
             if d.get('no_new_heavy'): cap_lv = min(cap_lv, 2)
             if cap_lv < self.gov.max_level: self.gov.max_level = cap_lv; self.gov.cap_why = '🤝 ' + d.get('why', '')
@@ -740,15 +735,37 @@ class Yield:
 
 
 
+HS_APPS = ['SortCut', 'FusionStitch', 'ComfyRemote', 'TikLive']
+
+
 def _hs_pol():
-    """V0.6.15 握手共用設定（三個程式一起用）：這台有誰、留給你幾 %、優先程式幾 %、平常怎麼分."""
+    """V0.6.17 握手共用設定（三個程式一起用；第 4 版起以 AppHandshake\\policy3.json 為準）：這台有誰、留給你幾 %、優先程式幾 %、平常怎麼分."""
     try:
         import app_handshake as HS
-        P = HS.policy(); S = P.get('share') or {}
-        return {'members': {a: HS.member(a, P) for a in getattr(HS, 'APPS', ['SortCut', 'FusionStitch', 'ComfyRemote'])}, 'reserve3': P.get('reserve3', 10),
-                'first': P.get('first') or [], 'first_cap': P.get('first_cap', 80), 'yield_cap': P.get('yield_cap', 5),
-                'share_sc': round(100 * float(S.get('SortCut', 50)) / max(1.0, float(S.get('SortCut', 50)) + float(S.get('FusionStitch', 50)))), 'by': P.get('by', '')}
+        P = HS.policy3(); M = list(P.get('members') or []); N = P.get('normal') or {}
+        sc, fs = float(N.get('SortCut', 45)), float(N.get('FusionStitch', 45))
+        return {'members': {a: (not M or a in M) for a in HS_APPS}, 'reserve3': P.get('reserve', 10), 'first': [P.get('boost_app') or ''],
+                'first_cap': P.get('boost', 80), 'yield_cap': P.get('boost_others', 5), 'share_sc': round(100 * sc / max(1.0, sc + fs)), 'by': P.get('by', '')}
     except Exception as ex: return {'err': str(ex)[:120]}
+
+
+def hs_set_pol(members=None, reserve3=None, first_cap=None, yield_cap=None, share_sc=None):
+    """V0.6.17 改共用設定（寫 policy3.json，ComfyRemote／FusionStitch 的畫面也看得到）。members＝{app: bool}（只給要改的）."""
+    import app_handshake as HS
+    P = HS.policy3(); kw = {}
+    if members:
+        cur = list(P.get('members') or []) or [a for a in HS_APPS if a != 'TikLive']   # 空的＝全部（TikLive 不握手，預設不算）
+        for a_, on_ in members.items():
+            if on_ and a_ not in cur: cur.append(str(a_))
+            if not on_ and a_ in cur: cur.remove(a_)
+        if 'SortCut' not in cur and members.get('SortCut') is not False: cur.append('SortCut')
+        kw['members'] = cur
+    if reserve3 is not None: kw['reserve'] = max(0, min(60, float(reserve3)))
+    if first_cap is not None: kw['boost'] = max(10, min(95, float(first_cap)))
+    if yield_cap is not None: kw['boost_others'] = max(0, min(40, float(yield_cap)))
+    if share_sc is not None: s_ = max(10, min(90, float(share_sc))); kw['normal'] = {'SortCut': s_, 'FusionStitch': 100 - s_}
+    if kw: HS.set_policy3('SortCut', **kw)
+    return kw
 
 def _reg():
     """放在 sys 上（熱更新重新載入這個檔也找得到舊的那個）."""

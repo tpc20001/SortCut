@@ -1,5 +1,15 @@
 [
  {
+  "version": "0.6.17",
+  "date": "2026-11-21",
+  "items": [
+   "🤝 修好：FusionStitch、ComfyRemote 看不到 SortCut（共用設定檔格式不一樣，SortCut 讀到就出錯、自己的狀態沒寫出去）",
+   "🤝 握手規則第 4 版：三邊統一用同一份（以 ComfyRemote 的設定檔 policy3.json 為準），另外兩個程式不用更新也會自動改用",
+   "設定檔看不懂、規則算錯，也照樣寫自己的狀態，別人不會再以為 SortCut 沒開",
+   "ComfyRemote 在做事時：SortCut 降到 5%、新的轉檔先不開；做完回到 45:45"
+  ]
+ },
+ {
   "version": "0.6.16",
   "date": "2026-11-21",
   "items": [
