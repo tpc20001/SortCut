@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.25'
+APP_VERSION = '0.6.26'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6474,7 +6474,16 @@ class ExplorePage(QWidget):
         self.mix = QLabel(); self.mix.setTextFormat(Qt.RichText); self.mix.setWordWrap(True); self.mix.setAlignment(Qt.AlignTop | Qt.AlignLeft); self.mix.setMargin(10)
         self.tabs.addTab(scroll_wrap(self.mix), '🎞 編碼／格式')
         sp.addWidget(self.tabs); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
+        for ks, fn in (('Backspace', self.up), ('Alt+Up', self.up), ('F5', lambda: (ENG.__dict__.pop('_exp_cache', None), self.refresh())), ('Ctrl+F', lambda: (self.q.setFocus(), self.q.selectAll()))):   # V0.6.26 鍵盤
+            sc = QShortcut(QKeySequence(ks), self); sc.setContext(Qt.WidgetWithChildrenShortcut); sc.activated.connect(lambda fn=fn, bk=(ks == 'Backspace'): (None if (bk and self.q.hasFocus()) else fn()))
+        self.tw.installEventFilter(self)
         self.hint = QLabel('點方塊或按兩下進去・右鍵（或手機長按）資料夾 → 🔁 轉檔／到檔案總管・方塊底下綠線＝能轉 H.265 的部分'); self.hint.setStyleSheet('color:#8994a4;font-size:11.5px'); v.addWidget(self.hint)
+
+    def eventFilter(self, o, e):
+        if o is self.tw and e.type() == QEvent.KeyPress and e.key() in (Qt.Key_Return, Qt.Key_Enter):
+            it = self.tw.currentItem()
+            if it is not None: self._dbl(it, 0); return True
+        return super().eventFilter(o, e)
 
     def _chip(self, t):
         L = self.q.text().split(); L = [x for x in L if x != t] if t in L else L + [t]; self.q.setText(' '.join(L))

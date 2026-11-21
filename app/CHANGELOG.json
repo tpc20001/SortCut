@@ -1,5 +1,12 @@
 [
  {
+  "version": "0.6.26",
+  "date": "2026-11-22",
+  "items": [
+   "⌨ 電腦版檔案總覽可以用鍵盤：Enter 進去、Backspace／Alt+↑ 上一層、Ctrl+F 搜尋、F5 重新讀"
+  ]
+ },
+ {
   "version": "0.6.25",
   "date": "2026-11-22",
   "items": [
