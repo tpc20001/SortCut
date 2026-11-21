@@ -149,6 +149,17 @@ def yield_api(S, req):
         if 'th_gpu' in d: E.cfg.set('thermal_gpu', max(50, min(95, int(d['th_gpu']))))
         if 'hs_on' in d: E.cfg.set('hs_on', bool(d['hs_on']))                     # V0.6.10 🤝 跟別的程式握手（FusionStitch）
         if 'hs_prio' in d: E.cfg.set('hs_prio', max(0, min(10, int(d['hs_prio']))))
+        try:                                                                    # V0.6.15 握手共用設定（三個程式一起變）
+            import app_handshake as HS; pk = {}
+            if isinstance(d.get('hs_members'), dict): pk['members'] = {str(k): bool(v) for k, v in d['hs_members'].items()}
+            for k_, v_ in d.items():
+                if str(k_).startswith('hs_m_'): pk.setdefault('members', {})[str(k_)[5:]] = bool(v_)
+            if d.get('hs_reserve') is not None: pk['reserve3'] = max(0, min(50, float(d['hs_reserve'])))
+            if d.get('hs_first_cap') is not None: pk['first_cap'] = max(10, min(95, float(d['hs_first_cap'])))
+            if d.get('hs_yield_cap') is not None: pk['yield_cap'] = max(1, min(30, float(d['hs_yield_cap'])))
+            if d.get('hs_share_sc') is not None: s_ = max(10, min(90, float(d['hs_share_sc']))); pk['share'] = {'SortCut': s_, 'FusionStitch': 100 - s_}
+            if pk: HS.set_policy('SortCut', **pk); E.log.w(f'🤝 握手共用設定：{pk}')
+        except Exception as ex: E.log.w(f'🤝 握手共用設定沒存到：{ex}')
         if 'hs_boost' in d: E.cfg.set('hs_boost_until', (time.time() + max(0, min(480, int(d['hs_boost']))) * 60) if int(d['hs_boost']) > 0 else 0)
         try: E.log.w(f'🤝 手機改讓路設定：{d}')
         except Exception: pass

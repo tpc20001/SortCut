@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.14'
+APP_VERSION = '0.6.15'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6179,11 +6179,38 @@ class YieldDlg(QDialog):
         hb = QHBoxLayout(); self.b_hb = QPushButton('⏩ 這邊先跑 1 小時'); self.b_hc = QPushButton('取消'); hb.addWidget(self.b_hb); hb.addWidget(self.b_hc); hb.addStretch(1); f.addRow('　', hb)
         self.b_hb.clicked.connect(lambda: (ENG.cfg.set('hs_boost_until', time.time() + 3600), ENG.log.w('🤝 握手：使用者按了「這邊先跑 1 小時」'), self.load()))
         self.b_hc.clicked.connect(lambda: (ENG.cfg.set('hs_boost_until', 0), self.load()))
+        try: import app_handshake as HS_; P_ = HS_.policy(); S_ = P_.get('share') or {}                                     # V0.6.15 三個程式共用的設定
+        except Exception: HS_ = None; P_ = {}; S_ = {}
+        mb = QHBoxLayout(); self.c_mfs = QCheckBox('FusionStitch'); self.c_mcr = QCheckBox('ComfyRemote'); self.c_mtk = QCheckBox('TikLive')
+        self.c_mfs.setChecked((P_.get('members') or {}).get('FusionStitch', True) is not False); self.c_mcr.setChecked((P_.get('members') or {}).get('ComfyRemote', True) is not False)
+        self.c_mtk.setChecked(ENG.cfg.get('yield_tk') is not False)
+        for w_ in (self.c_mtk, self.c_mfs, self.c_mcr): mb.addWidget(w_)
+        mb.addStretch(1); f.addRow('　☑ 這台有誰', mb)
+        self.s_res = QSpinBox(); self.s_res.setRange(0, 50); self.s_res.setSuffix(' %'); self.s_res.setValue(int(P_.get('reserve3', 10))); self.s_res.setToolTip('永遠留給你隨時操作電腦（三個程式合起來最多用 100 − 這個 %）')
+        self.s_fc = QSpinBox(); self.s_fc.setRange(10, 95); self.s_fc.setSuffix(' %'); self.s_fc.setValue(int(P_.get('first_cap', 80)))
+        self.s_yc = QSpinBox(); self.s_yc.setRange(1, 30); self.s_yc.setSuffix(' %'); self.s_yc.setValue(int(P_.get('yield_cap', 5)))
+        self.s_sh = QSpinBox(); self.s_sh.setRange(10, 90); self.s_sh.setSuffix(' %'); self.s_sh.setValue(round(100 * float(S_.get('SortCut', 50)) / max(1.0, float(S_.get('SortCut', 50)) + float(S_.get('FusionStitch', 50)))))
+        self.s_sh.setToolTip('兩個都在轉檔時：SortCut 佔幾 %（剩下給 FusionStitch），再乘上 100 − 留給你的 %')
+        rr = QHBoxLayout()
+        for lb_, w_ in (('留給你', self.s_res), ('ComfyRemote 優先時拿', self.s_fc), ('其他降到', self.s_yc), ('平常 SortCut 佔', self.s_sh)): rr.addWidget(QLabel(lb_)); rr.addWidget(w_)
+        rr.addStretch(1); f.addRow('　⚖ 分配', rr)
         self.cb_bd.currentIndexChanged.connect(self._save)
+        for w_ in (self.c_mfs, self.c_mcr, self.c_mtk): w_.toggled.connect(self._save_pol)          # V0.6.15 只有動到這幾個才改共用設定（不會蓋掉另外兩個程式剛改的）
+        for w_ in (self.s_res, self.s_fc, self.s_yc, self.s_sh): w_.valueChanged.connect(self._save_pol)
         for w_ in (self.c_on, self.c_tk, self.c_hs, self.s_hp, self.s_max, self.s_nv, self.c_th, self.s_thc, self.s_thv, self.s_thg, self.s_sp, self.s_rmn, self.s_rmx, self.s_bmx, self.s_cmx):
             (w_.toggled if isinstance(w_, QCheckBox) else w_.valueChanged).connect(self._save)
         b = QPushButton('關閉'); b.clicked.connect(self.accept); v.addWidget(b)
         self.t = QTimer(self); self.t.timeout.connect(self.load); self.t.start(2000); self.load()
+
+    def _save_pol(self, *_a):
+        """V0.6.15 三個程式共用的設定（存在 AppHandshake\\policy.json，三邊一起變）."""
+        try:
+            import app_handshake as HS_
+            if self.c_mtk.isChecked() != (ENG.cfg.get('yield_tk') is not False): ENG.cfg.set('yield_tk', bool(self.c_mtk.isChecked())); self.c_tk.setChecked(self.c_mtk.isChecked())
+            HS_.set_policy('SortCut', members={'FusionStitch': self.c_mfs.isChecked(), 'ComfyRemote': self.c_mcr.isChecked()}, reserve3=int(self.s_res.value()),
+                           first_cap=int(self.s_fc.value()), yield_cap=int(self.s_yc.value()), share={'SortCut': int(self.s_sh.value()), 'FusionStitch': 100 - int(self.s_sh.value())})
+            ENG.log.w('🤝 握手共用設定：' + str(HS_.policy().get('members')))
+        except Exception: ENG.log.err('🤝 握手共用設定')
 
     def _save(self, *_):
         ENG.cfg.set('yield_on', bool(self.c_on.isChecked())); ENG.cfg.set('yield_tk', bool(self.c_tk.isChecked())); ENG.cfg.set('yield_max', int(self.s_max.value())); ENG.cfg.set('nvenc_limit', int(self.s_nv.value()))
@@ -6208,9 +6235,10 @@ class YieldDlg(QDialog):
         tk = ('✅ TikLive 已連上（' + str(V.get('tk_ver') or '') + f"）：錄影 {V.get('tk_rec') or 0} 間、轉檔 {V.get('tk_conv') or 0}、字幕 {'跑' if V.get('tk_stt') else '沒跑'}") if V.get('tk_link') else (
             '🟡 TikLive 有在跑，但還沒更新到 TK_V1.0.84：用量測的（量得到它整串程式用多少，只是不知道它「等一下要開始做什麼」）' if V.get('tk') else '⚪ 這台沒有看到 TikLive')
         H_ = V.get('hs') or {}; P_ = H_.get('peers') or []; W_ = ['閒著', '背景小工作', '在做重工作', '使用者在等']
-        M_ = {'lead': '✅ 這邊先跑', 'yield': '🤝 讓對方先跑', 'split': '⚖ 跟對方平分', 'alone': '⚪ 各跑各的'}
+        M_ = {'lead': '⚡ 這邊優先', 'yield': '🤝 讓別人先跑', 'split': '⚖ 照比例分', 'alone': '⚪ 各跑各的'}
         tk += ('<br>' + '<br>'.join(f"🔗 <b>{esc_html(p.get('name') or p.get('app'))}</b> V{esc_html(p.get('ver') or '')}：{W_[int(p.get('want') or 0)]}" + (f"（{esc_html(p.get('what'))}）" if p.get('what') else '') + f"・優先 {p.get('prio', 5)}" for p in P_)
-               if P_ else '<br>⚪ 沒有看到 FusionStitch（它更新到有握手的版本、而且開著，就會出現）')
+               if P_ else '<br>⚪ 沒有看到 FusionStitch／ComfyRemote（更新到有握手的版本、而且開著，就會出現）')
+        if H_.get('alloc'): tk += '<br>現在分配：' + '・'.join(f"<b>{esc_html(a)}</b> {c}%" for a, c in H_['alloc'].items()) + (f"（這邊重工作最多 {H_['cpu_cap']}%）" if H_.get('cpu_cap') is not None else '') + f"・規則第 {H_.get('rules') or '?'} 版"
         if H_.get('mode'): tk += f"<br><b>{M_.get(H_['mode'], H_['mode'])}</b>" + (f"：{esc_html(H_.get('why'))}" if H_.get('why') else '') + (f"・這邊先跑還剩 {-(-int(H_['boost']) // 60)} 分" if H_.get('boost') else '')
         h = (f"<p>{tk}</p><table cellspacing=0 cellpadding=3 width=100%><tr><th align=left>項目</th><th align=right>整台</th><th align=right>TikLive</th><th align=right>這邊</th><th align=right>這項允許 Lv</th></tr>{rows}"
              f"<tr><td>RAM</td><td align=right>{fm(V.get('ram'))}</td><td></td><td></td><td align=right>{(V.get('L') or {}).get('ram', '—')}</td></tr>"

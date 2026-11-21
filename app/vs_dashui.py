@@ -124,11 +124,19 @@ function lvBody(box){const v=LVV||{},U=v.use||{},L=v.L||{},N={cpu:'CPU',gpu:'顯
    ${v.th_on?`<p class="lvmu">🌡 這邊現在最多用整台 CPU 的 <b>${(v.th||{}).cap??'—'}%</b>（預算 ${(v.th||{}).budget??'—'}% − 其他程式 ${(v.th||{}).others??'—'}%）・顯示卡 ${v.gpu_temp??'—'}°C・後台同時只做 1 個${(v.th||{}).err?`<br><span style="color:#e5484d">${dzE(v.th.err)}</span>`:''}</p>`:''}
    ${v.th_on&&v.heat?(()=>{const H=v.heat,S=H.stats||{},ss=H.sess;return `<p class="lvmu"><b>🌡 轉檔看溫度</b>：${dzE(H.why||'—')}${ss?`<br>正在轉 ${ss.mins} 分鐘，${dzE(ss.sensor)} ${Math.round(ss.t0||0)}→最高 ${Math.round(ss.peak||0)}°C`:''}
     ${S.n?`<br>學到的（最近 ${S.n} 部）：轉一部升 ${S.rise}°C、轉 ${S.mins} 分鐘、轉完 ${S.cool} 分鐘降回來`:'<br>還沒學到（轉完第一部就有）'}${(H.log||[]).length?'<br>'+H.log.map(dzE).join('<br>'):''}</p>`})():''}
-   ${(()=>{const H=v.hs||{},P=H.peers||[],M={lead:'✅ 這邊先跑',yield:'🤝 讓對方先跑',split:'⚖ 跟對方平分',alone:'⚪ 各跑各的'},W=['閒著','背景小工作','在做重工作','使用者在等'];
+   ${(()=>{const H=v.hs||{},Q=H.pol||{},MB=Q.members||{},AL=H.alloc||{};
+     return `<div class="lvrow" style="border-top:1px solid rgba(127,140,160,.2);padding-top:8px"><b>☑ 這台有誰</b>
+       <label><input type="checkbox" data-lv="tk" ${v.tk_cfg!==false?'checked':''}> TikLive</label>${['FusionStitch','ComfyRemote'].map(a=>`<label><input type="checkbox" data-lv="hs_m_${a}" ${MB[a]!==false?'checked':''}> ${a}</label>`).join('')}</div>
+     <div class="lvrow"><label>留給你 <select data-lv="hs_reserve">${[0,5,10,15,20,30].map(x=>`<option value="${x}" ${x==(Q.reserve3??10)?'selected':''}>${x}%</option>`).join('')}</select></label>
+       <label>ComfyRemote 優先時拿 <select data-lv="hs_first_cap">${[60,70,80,85,90].map(x=>`<option value="${x}" ${x==(Q.first_cap??80)?'selected':''}>${x}%</option>`).join('')}</select></label>
+       <label>其他降到 <select data-lv="hs_yield_cap">${[2,5,10,15].map(x=>`<option value="${x}" ${x==(Q.yield_cap??5)?'selected':''}>${x}%</option>`).join('')}</select></label>
+       <label>平常 SortCut : FusionStitch <select data-lv="hs_share_sc">${[30,40,50,60,70].map(x=>`<option value="${x}" ${x==(Q.share_sc??50)?'selected':''}>${x} : ${100-x}</option>`).join('')}</select></label></div>
+     ${Object.keys(AL).length?`<p class="lvmu">現在分配：${Object.entries(AL).map(([a,c])=>`<b>${dzE(a)}</b> ${c}%`).join('・')}${H.cpu_cap!=null?`（這邊重工作最多 ${H.cpu_cap}%）`:''}・規則第 ${H.rules||'?'} 版</p>`:''}`})()}
+   ${(()=>{const H=v.hs||{},P=H.peers||[],M={lead:'⚡ 這邊優先',yield:'🤝 讓別人先跑',split:'⚖ 照比例分',alone:'⚪ 各跑各的'},W=['閒著','背景小工作','在做重工作','使用者在等'];
      return `<div class="lvrow" style="border-top:1px solid rgba(127,140,160,.2);padding-top:8px"><label><input type="checkbox" data-lv="hs_on" ${H.on!==false?'checked':''}> 🤝 跟別的程式握手（FusionStitch）：誰需要 CPU 就讓誰先跑</label></div>
      <div class="lvrow"><label>這邊的優先 <select data-lv="hs_prio">${[...Array(11)].map((_,i)=>`<option value="${i}" ${i===(H.prio??5)?'selected':''}>${i}${i===5?'（一樣）':i>5?'（這邊先）':'（對方先）'}</option>`).join('')}</select></label>
      <label>這邊先跑 <select data-lv="hs_boost">${[[0,H.boost?'取消':'—'],[30,'30 分'],[60,'1 小時'],[120,'2 小時'],[240,'4 小時']].map(([m,t])=>`<option value="${m}">${t}</option>`).join('')}</select></label></div>
-     <p class="lvmu">${P.length?P.map(p=>`🔗 <b>${dzE(p.name||p.app)}</b> V${dzE(p.ver||'')}：${W[p.want||0]||''}${p.what?'（'+dzE(p.what)+'）':''}・優先 ${p.prio??5}`).join('<br>')+'<br>':'⚪ 沒有看到 FusionStitch（它更新到有握手的版本、而且開著，就會出現在這裡）<br>'}
+     <p class="lvmu">${P.length?P.map(p=>`🔗 <b>${dzE(p.name||p.app)}</b> V${dzE(p.ver||'')}：${W[p.want||0]||''}${p.what?'（'+dzE(p.what)+'）':''}・優先 ${p.prio??5}`).join('<br>')+'<br>':'⚪ 沒有看到 FusionStitch／ComfyRemote（更新到有握手的版本、而且開著，就會出現在這裡）<br>'}
      ${H.mode?`<b>${M[H.mode]||H.mode}</b>${H.why?'：'+dzE(H.why):''}`:''}${H.boost?`・使用者按了這邊先跑（還剩 ${Math.ceil(H.boost/60)} 分）`:''}${H.err?`<br><span style="color:#e5484d">${dzE(H.err)}</span>`:''}</p>`})()}
    <p class="lvmu">Lv 是每一項「允許的等級」裡最小的那個。降：馬上；升：每 8 秒最多 +1。Lv 10 也不吃滿：整台 CPU ≤85%、顯示卡 ≤80%、NVENC ≤75%，TikLive 最近 10 分鐘的高峰先空一半（現在保留：${R}）。Lv 2 以下轉檔／瘦身先不開新的（跑到一半的照跑完）。</p>
    ${(v.log||[]).length?`<p class="lvmu"><b>最近變化</b><br>${v.log.map(dzE).join('<br>')}</p>`:''}`}

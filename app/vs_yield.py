@@ -603,9 +603,15 @@ class Yield:
             if self.hs is None:
                 import app_handshake as HS
                 self.hs = HS.Handshake('SortCut', 'SortCut', self.ver, 8461, self._hs_state).start()
-            d = self.hs.decide(); self.hs_d = d; self.gov.cap_why = ''
-            if not self.on or d.get('mode') not in ('yield', 'split'): return
-            cap_lv = (2 if d.get('no_new_heavy') else 4) if d['mode'] == 'yield' else 6
+            import app_handshake as HS
+            d = self.hs.decide(); self.gov.cap_why = ''
+            try:
+                if not HS.member('SortCut', HS.policy()): d = {**d, 'mode': 'alone', 'cpu_cap': None, 'nvenc_cap': None, 'no_new_heavy': False, 'why': '「這台有誰」沒有勾 SortCut'}
+            except Exception: pass
+            self.hs_d = d
+            if not self.on or d.get('cpu_cap') is None or d.get('mode') == 'alone': return     # V0.6.15 規則第 3 版：照 cpu_cap（整台 CPU 的 %）換成等級
+            cap_lv = max(1, min(10, int(math.ceil(float(d['cpu_cap']) / 10.0))))
+            if d.get('no_new_heavy'): cap_lv = min(cap_lv, 2)
             if cap_lv < self.gov.max_level: self.gov.max_level = cap_lv; self.gov.cap_why = '🤝 ' + d.get('why', '')
             if self.gov.level > cap_lv:
                 self.gov.level = cap_lv; self.gov.target = min(self.gov.target, cap_lv); self.gov.t_drop = time.time(); self.gov.why = '🤝 ' + d.get('why', '')
@@ -721,7 +727,7 @@ class Yield:
         cpu_src = {'src': getattr(Pf_, 'cpu_src', ''), 'old': getattr(Pf_, 'cpu_old', None)}
         D_ = dict(getattr(self, 'hs_d', None) or {})
         hs_ = {'on': self.cfg('hs_on') is not False, 'prio': int(self.cfg('hs_prio') if self.cfg('hs_prio') is not None else 5), 'mode': D_.get('mode'), 'why': D_.get('why', ''),
-               'peers': D_.get('peers') or [], 'boost': max(0, int(float(self.cfg('hs_boost_until') or 0) - time.time())), 'me': (self.hs.me if self.hs is not None else {}), 'err': (self.hs.err if self.hs is not None else '')}
+               'peers': D_.get('peers') or [], 'alloc': D_.get('alloc') or {}, 'cpu_cap': D_.get('cpu_cap'), 'rules': D_.get('rules'), 'rules_from': D_.get('rules_from'), 'pol': _hs_pol(), 'boost': max(0, int(float(self.cfg('hs_boost_until') or 0) - time.time())), 'me': (self.hs.me if self.hs is not None else {}), 'err': (self.hs.err if self.hs is not None else '')}
         return {'on': self.on, 'tk_cfg': self.tk_cfg(), 'cpu_src': cpu_src, 'hs': hs_, 'level': self.level, 'target': G.target, 'why': G.why, 'col': COL.get(self.level, '#888'), 'duty': (DUTY.get(self.level, 1.0) if self.cfg('yield_suspend') is True else 1.0),
                 'tk': bool(s.get('tk_seen')), 'tk_link': bool(tk), 'tk_ver': tk.get('ver'), 'tk_rec': tk.get('rec'), 'tk_conv': tk.get('conv'), 'tk_stt': tk.get('stt'),
                 'burst': G.burst, 'max': G.max_level,
@@ -732,6 +738,17 @@ class Yield:
                 'th_cpu': float(self.cfg('thermal_cpu') or 45), 'th_vs': float(self.cfg('thermal_vs_max') or 15), 'th_gpu': float(self.cfg('thermal_gpu') or 75),
                 'gpu_temp': (getattr(getattr(self.E, 'perf', None), 'gpu', None) or {}).get('temp'), 'alert': self.read_alert(), 'heat': (self.heat.view() if getattr(self, 'heat', None) is not None else None)}
 
+
+
+def _hs_pol():
+    """V0.6.15 握手共用設定（三個程式一起用）：這台有誰、留給你幾 %、優先程式幾 %、平常怎麼分."""
+    try:
+        import app_handshake as HS
+        P = HS.policy(); S = P.get('share') or {}
+        return {'members': {a: HS.member(a, P) for a in getattr(HS, 'APPS', ['SortCut', 'FusionStitch', 'ComfyRemote'])}, 'reserve3': P.get('reserve3', 10),
+                'first': P.get('first') or [], 'first_cap': P.get('first_cap', 80), 'yield_cap': P.get('yield_cap', 5),
+                'share_sc': round(100 * float(S.get('SortCut', 50)) / max(1.0, float(S.get('SortCut', 50)) + float(S.get('FusionStitch', 50)))), 'by': P.get('by', '')}
+    except Exception as ex: return {'err': str(ex)[:120]}
 
 def _reg():
     """放在 sys 上（熱更新重新載入這個檔也找得到舊的那個）."""

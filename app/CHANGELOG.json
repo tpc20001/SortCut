@@ -1,5 +1,15 @@
 [
  {
+  "version": "0.6.15",
+  "date": "2026-11-21",
+  "items": [
+   "🤝 跟 FusionStitch、ComfyRemote 三個一起握手：平常 SortCut 45%、FusionStitch 45%，留 10% 給你；只有一個在轉就 90%",
+   "⚡ ComfyRemote 一送出工作就最優先：它 80%，SortCut 和 FusionStitch 都降到 5%、新的先不開；做完大家回來",
+   "☑ 這台有誰：TikLive、FusionStitch、ComfyRemote 可以勾，沒勾的不算；⚖ 留給你幾 %、優先拿幾 %、平常比例都能調（三個程式一起變）",
+   "FusionStitch 現在的版本會自動改用這個新規則（不用等它更新）；給另外兩邊 AI 的說明：app/HANDSHAKE_握手協定.md"
+  ]
+ },
+ {
   "version": "0.6.14",
   "date": "2026-11-19",
   "items": [
