@@ -6,14 +6,14 @@ import os, sys, re, json, time, math, random, shutil, zipfile, threading, traceb
 from pathlib import Path
 from collections import OrderedDict, deque
 
-from PySide6.QtCore import Qt, QTimer, QObject, Signal, Slot, QRect, QRectF, QPoint, QSize, QUrl, QEvent, QMimeData, qInstallMessageHandler
+from PySide6.QtCore import Qt, QTimer, QObject, Signal, Slot, QRect, QRectF, QPoint, QPointF, QSize, QUrl, QEvent, QMimeData, qInstallMessageHandler
 from PySide6.QtGui import (QPainter, QColor, QPixmap, QImage, QIcon, QFont, QPen, QAction, QKeySequence, QShortcut, QDesktopServices, QPainterPath, QCursor, QFontMetrics, QLinearGradient, QRadialGradient, QWindow)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QListWidget, QListWidgetItem,
                                QTreeWidget, QTreeWidgetItem, QSplitter, QStackedWidget, QScrollArea, QComboBox, QSpinBox, QCheckBox, QLineEdit, QFileDialog,
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.18'
+APP_VERSION = '0.6.19'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -21,6 +21,7 @@ import core  # noqa: E402
 import vs_web  # noqa: E402  V0.1.49 手機網頁
 import vs_face  # noqa: E402  V0.1.51 人物
 from core import fmt_t, fmt_b  # noqa: E402
+import html as _html  # noqa: E402
 
 ROOT = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else HERE.parent
 SELFTEST = bool(os.environ.get('VIDEOSIFT_SELFTEST'))
@@ -3362,6 +3363,15 @@ class ConvPage(QWidget):
         for kk, b in self.kind_b.items(): b.setChecked(kk == k)
         self._ext_sel = set(); self._save_range(); self.load()
 
+    def use_folder(self, path, kind='all'):
+        """V0.6.19 從 🗺 檔案總覽 跳過來：範圍＝這個資料夾（含子資料夾）、種類＝選的那種、回到「➕ 選檔加入」."""
+        self.fd_list.clear(); self.fd_list.addItem(str(path)); self._ext_sel = set()
+        self.kind = kind; ENG.cfg.set('cv_kind', kind)
+        for kk, b in self.kind_b.items(): b.setChecked(kk == kind)
+        try: self.tabs.setCurrentIndex(0)
+        except Exception: pass
+        self._save_range(); self.load()
+
     def _range(self):
         return dict(exts=sorted(self._ext_sel), smin=self.smin.value(), smax=self.smax.value(), folders=[self.fd_list.item(i).text() for i in range(self.fd_list.count())])
 
@@ -6339,6 +6349,223 @@ class BarRow(QWidget):
         p.end()
 
 
+class TreeMap(QWidget):
+    """🗺 方塊圖（像 TreeSize／WinDirStat）：面積＝大小；點一下進去、右鍵＝選單."""
+    COLS = ['#3987e5', '#45b5d4', '#3fb37f', '#b9a43c', '#e09a3e', '#e5735f', '#9d7be0', '#e06fa5', '#5d8fc9', '#58a39a']
+
+    def __init__(self, page):
+        super().__init__(); self.page = page; self.items = []; self.rects = []; self.hot = -1
+        self.setMinimumHeight(220); self.setMouseTracking(True)
+
+    def set_items(self, items):
+        self.items = [x for x in items if x.get('size', 0) > 0][:60]; self.hot = -1; self._lay(); self.update()
+
+    def resizeEvent(self, e): self._lay(); super().resizeEvent(e)
+
+    def _lay(self):
+        W, H = max(1, self.width()), max(1, self.height()); tot = float(sum(x['size'] for x in self.items)) or 1.0
+        vals = [x['size'] / tot * W * H for x in self.items]; out = []
+        def worst(row, w):
+            s = sum(row); return max(max(w * w * r / (s * s), (s * s) / (w * w * r)) for r in row) if row and s > 0 and w > 0 else 1e9
+        x, y, w, h = 0.0, 0.0, float(W), float(H); i = 0
+        while i < len(vals):
+            side = min(w, h); row = [vals[i]]; j = i + 1
+            while j < len(vals) and worst(row + [vals[j]], side) <= worst(row, side): row.append(vals[j]); j += 1
+            s = sum(row)
+            if w >= h:
+                cw = s / h if h else 0; yy = y
+                for r in row: rh = r / cw if cw else 0; out.append(QRectF(x, yy, cw, rh)); yy += rh
+                x += cw; w -= cw
+            else:
+                rh = s / w if w else 0; xx = x
+                for r in row: cw = r / rh if rh else 0; out.append(QRectF(xx, y, cw, rh)); xx += cw
+                y += rh; h -= rh
+            i = j
+        self.rects = out
+
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        if not self.items:
+            p.setPen(QColor('#8994a4')); p.drawText(self.rect(), Qt.AlignCenter, '這裡沒有子資料夾'); return
+        tot = float(sum(x['size'] for x in self.items)) or 1.0
+        for k, (r, it) in enumerate(zip(self.rects, self.items)):
+            rr = r.adjusted(1, 1, -1, -1)
+            if rr.width() < 1 or rr.height() < 1: continue
+            c = QColor(self.COLS[k % len(self.COLS)])
+            if k == self.hot: c = c.lighter(125)
+            path = QPainterPath(); path.addRoundedRect(rr, 4, 4); p.fillPath(path, c)
+            sv = float(it.get('conv_b') or 0) / max(1, it['size'])                       # 下面那條綠的＝能轉 H.265 的部分
+            if sv > 0.01 and rr.height() > 14:
+                p.fillRect(QRectF(rr.left() + 3, rr.bottom() - 5, (rr.width() - 6) * min(1.0, sv), 3), QColor('#7CFC9A'))
+            if rr.width() > 46 and rr.height() > 22:
+                p.setPen(QColor('#ffffff')); f = p.font(); f.setBold(True); f.setPointSizeF(9.5); p.setFont(f)
+                t = QRectF(rr.left() + 6, rr.top() + 4, rr.width() - 10, rr.height() - 8)
+                fm = QFontMetrics(f); nm = fm.elidedText(it['name'], Qt.ElideRight, int(t.width()))
+                p.drawText(t, Qt.AlignLeft | Qt.AlignTop, nm)
+                if rr.height() > 40:
+                    f.setBold(False); f.setPointSizeF(8.5); p.setFont(f)
+                    p.drawText(t.adjusted(0, 16, 0, 0), Qt.AlignLeft | Qt.AlignTop, f"{core.fmt_b(it['size'])}・{it['size'] / tot * 100:.0f}%")
+
+    def _at(self, pos):
+        for k, r in enumerate(self.rects):
+            if r.contains(QPointF(pos)): return k
+        return -1
+
+    def mouseMoveEvent(self, e):
+        k = self._at(e.position().toPoint() if hasattr(e, 'position') else e.pos())
+        if k != self.hot:
+            self.hot = k; self.update()
+            if 0 <= k < len(self.items):
+                it = self.items[k]; QToolTip.showText(e.globalPosition().toPoint() if hasattr(e, 'globalPosition') else e.globalPos(),
+                    f"📁 {it['path']}\n{core.fmt_b(it['size'])}・{it['n']:,} 個檔" + (f"\n能轉 {it.get('conv_n', 0):,} 部，預估省 {core.fmt_b(it.get('save', 0))}" if it.get('conv_n') else ''), self)
+
+    def leaveEvent(self, e): self.hot = -1; self.update()
+
+    def mouseReleaseEvent(self, e):
+        k = self._at(e.position().toPoint() if hasattr(e, 'position') else e.pos())
+        if not (0 <= k < len(self.items)): return
+        if e.button() == Qt.RightButton: self.page.menu_for(self.items[k], self.mapToGlobal(e.position().toPoint() if hasattr(e, 'position') else e.pos()))
+        elif e.button() == Qt.LeftButton: self.page.go(self.items[k]['path'])
+
+
+class ExplorePage(QWidget):
+    """V0.6.19 🗺 檔案總覽：像 Everything 搜尋檔名、像 TreeSize 一層一層看哪個資料夾最大、能轉幾部、預估省多少；右鍵資料夾 → 轉檔."""
+    SORTS = [('size', '大小'), ('n', '檔案數'), ('save', '可省最多'), ('name', '名稱')]
+
+    def __init__(self, win):
+        super().__init__(); self.win = win; self.prefix = str(ENG.cfg.get('ex_prefix') or ''); self.sort = str(ENG.cfg.get('ex_sort') or 'size'); self._j = None; self._seq = 0
+        v = QVBoxLayout(self); v.setContentsMargins(14, 10, 14, 10); v.setSpacing(8)
+        top = QHBoxLayout(); self.q = QLineEdit(); self.q.setPlaceholderText('🔍 找檔案（像 Everything：空白分開，每個字都要出現在路徑裡；在某個資料夾裡就只找那裡）'); self.q.setClearButtonEnabled(True)
+        self._qt = QTimer(self); self._qt.setSingleShot(True); self._qt.timeout.connect(self.refresh); self.q.textChanged.connect(lambda _t: self._qt.start(300))
+        top.addWidget(self.q, 1); self.cb = QComboBox()
+        for k, n in self.SORTS: self.cb.addItem(n, k)
+        self.cb.setCurrentIndex(max(0, [k for k, _ in self.SORTS].index(self.sort) if self.sort in [k for k, _ in self.SORTS] else 0))
+        self.cb.currentIndexChanged.connect(self._sort); top.addWidget(QLabel('排序')); top.addWidget(self.cb)
+        b = QPushButton('⟳'); b.setToolTip('重新讀'); b.clicked.connect(lambda: (ENG.__dict__.pop('_exp_cache', None), self.refresh())); top.addWidget(b); v.addLayout(top)
+        nav = QHBoxLayout(); self.b_up = QPushButton('⬆ 上一層'); self.b_up.clicked.connect(self.up); nav.addWidget(self.b_up)
+        self.crumb = QLabel(); self.crumb.setTextFormat(Qt.RichText); self.crumb.linkActivated.connect(self.go); self.crumb.setWordWrap(True); nav.addWidget(self.crumb, 1); v.addLayout(nav)
+        kp = QHBoxLayout(); self.k = {}
+        for key, nm, col in (('size', '這裡總共', '#3987e5'), ('n', '檔案', '#8994a4'), ('conv_n', '能轉的', '#e09a3e'), ('save', '轉完預估省', '#3fb37f')):
+            f = QFrame(); f.setObjectName('exk'); f.setStyleSheet(f'QFrame#exk{{background:rgba(127,140,160,0.08);border:1px solid rgba(127,140,160,0.28);border-top:3px solid {col};border-radius:12px}}')
+            fv = QVBoxLayout(f); fv.setContentsMargins(12, 6, 12, 6); fv.setSpacing(0); a = QLabel(nm); a.setStyleSheet('font-size:11.5px;color:#8994a4'); fv.addWidget(a)
+            bb = QLabel('—'); bb.setStyleSheet('font-size:22px;font-weight:800' + (';color:#3fb37f' if key == 'save' else '')); fv.addWidget(bb); self.k[key] = bb; kp.addWidget(f, 1)
+        self.b_conv = QPushButton('🔁 轉檔這個資料夾'); self.b_conv.setMinimumHeight(44); self.b_conv.clicked.connect(lambda: self.menu_for({'path': self.prefix, 'name': self.prefix.rsplit('\\', 1)[-1] or self.prefix}, None))
+        kp.addWidget(self.b_conv); v.addLayout(kp)
+        sp = QSplitter(Qt.Vertical); self.tm = TreeMap(self); sp.addWidget(self.tm)
+        self.tw = QTreeWidget(); self.tw.setRootIsDecorated(False); self.tw.setAlternatingRowColors(True); self.tw.setUniformRowHeights(True)
+        self.tw.setContextMenuPolicy(Qt.CustomContextMenu); self.tw.customContextMenuRequested.connect(self._ctx); self.tw.itemDoubleClicked.connect(self._dbl)
+        sp.addWidget(self.tw); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
+        self.hint = QLabel('點方塊或按兩下進去・右鍵（或手機長按）資料夾 → 🔁 轉檔／到檔案總管・方塊底下綠線＝能轉 H.265 的部分'); self.hint.setStyleSheet('color:#8994a4;font-size:11.5px'); v.addWidget(self.hint)
+
+    def _sort(self, _i):
+        self.sort = self.cb.currentData() or 'size'; ENG.cfg.set('ex_sort', self.sort); self.refresh()
+
+    def go(self, path):
+        self.prefix = str(path or ''); ENG.cfg.set('ex_prefix', self.prefix)
+        if self.q.text(): self.q.blockSignals(True); self.q.clear(); self.q.blockSignals(False)
+        self.refresh()
+
+    def up(self):
+        j = self._j or {}; self.go(j.get('parent', '') if self.prefix else '')
+
+    def _crumbs(self):
+        if not self.prefix: return '<b>💽 全部影片庫</b>'
+        parts = [x for x in self.prefix.split('\\') if x]; acc = ''; h = '<a href="">💽</a>'
+        for i, x in enumerate(parts):
+            acc = acc + '\\' + x if i else x; h += f' › <a href="{_html.escape(acc)}">{_html.escape(x)}</a>'
+        return h
+
+    def refresh(self):
+        self._seq += 1; seq = self._seq; q = self.q.text().strip(); pf = self.prefix; so = self.sort
+        self.crumb.setText(self._crumbs()); self.b_up.setEnabled(bool(pf))
+        def get():
+            if q: return ENG.explore_search(q, pf, 'name' if so == 'name' else 'size', 500)
+            return ENG.explore(pf, so)
+        bg(get, lambda j, seq=seq, q=q: seq == self._seq and self._show(j, q), lambda e: self.win.msg(f'🗺 讀不到：{e}'))
+
+    def _show(self, j, q):
+        if not j or not j.get('ok'): return
+        self.tw.clear()
+        if q:
+            self._j = None; self.tm.setVisible(False); self.b_conv.setVisible(False)
+            self.tw.setHeaderLabels(['檔名', '大小', '資料夾', '格式']); R = j.get('rows') or []
+            self.k['size'].setText(core.fmt_b(j.get('sum', 0))); self.k['n'].setText(f"{j.get('n', 0):,}{'+' if j.get('more') else ''}"); self.k['conv_n'].setText('—'); self.k['save'].setText('—')
+            for r in R:
+                it = QTreeWidgetItem([r['name'], core.fmt_b(r['size']), r['folder'], (r.get('vcodec') or '').upper() + ('・✔ 轉好' if r.get('cv') == 3 else '')])
+                it.setData(0, Qt.UserRole, ('f', r)); it.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter); self.tw.addTopLevelItem(it)
+            self.hint.setText(f"找到 {j.get('n', 0):,} 個{'（只列前 500 個，多打幾個字縮小）' if j.get('more') else ''}・按兩下到檔案總管看這部・右鍵＝在 Windows 檔案總管顯示")
+            for c, w in ((0, 380), (1, 90), (2, 360)): self.tw.setColumnWidth(c, w)
+            return
+        self._j = j; I = j.get('items') or []; T = j.get('tot') or {}; H = j.get('here') or {}; tot = max(1, int(T.get('size') or 0))
+        self.tm.setVisible(True); self.b_conv.setVisible(bool(self.prefix) and bool(T.get('conv_n')))
+        self.b_conv.setText(f"🔁 轉檔這個資料夾\n預估省 {core.fmt_b(T.get('save', 0))}")
+        self.k['size'].setText(core.fmt_b(T.get('size', 0))); self.k['n'].setText(f"{int(T.get('n') or 0):,}"); self.k['conv_n'].setText(f"{int(T.get('conv_n') or 0):,}"); self.k['save'].setText(core.fmt_b(T.get('save', 0)))
+        self.tm.set_items(sorted(I, key=lambda x: -x['size']))
+        self.tw.setHeaderLabels(['資料夾', '大小', '佔比', '檔案數', '能轉', '預估省'])
+        for x in I:
+            it = QTreeWidgetItem([f"📁 {x['name']}", core.fmt_b(x['size']), f"{x['size'] / tot * 100:.1f}%", f"{x['n']:,}", f"{x.get('conv_n', 0):,}" if x.get('conv_n') else '', core.fmt_b(x['save']) if x.get('save') else ''])
+            it.setData(0, Qt.UserRole, ('d', x))
+            for c in range(1, 6): it.setTextAlignment(c, Qt.AlignRight | Qt.AlignVCenter)
+            if x.get('save'): it.setForeground(5, QColor('#3fb37f'))
+            self.tw.addTopLevelItem(it)
+        if H.get('n'):
+            it = QTreeWidgetItem([f"📄 直接放在這一層的檔案", core.fmt_b(H.get('size', 0)), f"{H.get('size', 0) / tot * 100:.1f}%", f"{H['n']:,}", f"{H.get('conv_n', 0):,}" if H.get('conv_n') else '', core.fmt_b(H.get('save', 0)) if H.get('save') else ''])
+            it.setData(0, Qt.UserRole, ('h', {'path': self.prefix, 'name': '這一層'})); it.setForeground(0, QColor('#8994a4'))
+            for c in range(1, 6): it.setTextAlignment(c, Qt.AlignRight | Qt.AlignVCenter)
+            self.tw.addTopLevelItem(it)
+        for c, w in ((0, 340), (1, 90), (2, 70), (3, 80), (4, 70), (5, 90)): self.tw.setColumnWidth(c, w)
+        self.hint.setText('點方塊或按兩下進去・右鍵資料夾 → 🔁 轉檔（H.264→H.265 等，先算好能省多少）／到檔案總管・方塊底下綠線＝能轉的部分')
+
+    def _dbl(self, it, _c):
+        k, x = it.data(0, Qt.UserRole) or ('', {})
+        if k == 'd': self.go(x['path'])
+        elif k == 'h': self._to_browse(self.prefix)
+        elif k == 'f': self.win.nav.setCurrentRow(0); self.win.browse.goto_file(int(x['id']))
+
+    def _ctx(self, pos):
+        it = self.tw.itemAt(pos)
+        if it is None: return
+        k, x = it.data(0, Qt.UserRole) or ('', {})
+        g = self.tw.viewport().mapToGlobal(pos)
+        if k == 'f':
+            m = QMenu(self); m.addAction('📂 在 Windows 檔案總管顯示', lambda: core.explorer_select(x.get('path') or ''))
+            m.addAction('▦ 到 SortCut 檔案總管看這部', lambda: (self.win.nav.setCurrentRow(0), self.win.browse.goto_file(int(x['id']))))
+            m.addAction('📋 複製路徑', lambda: QApplication.clipboard().setText(x.get('path') or '')); m.exec(g); return
+        self.menu_for(x, g)
+
+    def _to_browse(self, path):
+        try: self.win.nav.setCurrentRow(0); self.win.browse.use_view({'name': f'🗺 {path}', 'folder': path, 'flt': 'all', 'sort': 'name', 'sub': True})
+        except Exception: ENG.log.err('🗺 到檔案總管')
+
+    def menu_for(self, x, gpos):
+        """右鍵資料夾：先在背景算好三種轉檔各能省多少，再跳選單."""
+        path = x.get('path') or ''
+        if not path: return
+        self.win.msg('🗺 計算能省多少…', 2000)
+        K = [('h264', 'H.264 → H.265'), ('nonmp4', '非 MP4 → MP4（H.265）'), ('all', '兩種都要')]
+        def get():
+            out = []
+            for k, _n in K:
+                try: P = ENG.conv_plan(None, 0, 0, [path], 'size_desc', k, 0, 0)
+                except Exception: P = {}
+                out.append(P or {})
+            return out
+        def show(P):
+            m = QMenu(self); m.setToolTipsVisible(True); t = m.addAction(f"🔁 轉檔「{x.get('name') or path}」"); t.setEnabled(False)
+            for (k, n), p in zip(K, P):
+                na = int(p.get('n_all') or 0); a = m.addAction(f"   {n}：{na:,} 部・預估省 {core.fmt_b(p.get('save_all') or 0)}", lambda k=k: self.to_conv(path, k)); a.setEnabled(na > 0)
+            m.addSeparator(); m.addAction('▦ 到 SortCut 檔案總管看這個資料夾', lambda: self._to_browse(path))
+            m.addAction('📂 在 Windows 檔案總管打開', lambda: core.explorer_select(path)); m.addAction('📋 複製路徑', lambda: QApplication.clipboard().setText(path))
+            m.exec(gpos or QCursor.pos())
+        bg(get, show)
+
+    def to_conv(self, path, kind):
+        try:
+            self.win.nav.setCurrentRow(1); self.win.conv.use_folder(path, kind)
+            self.win.msg(f'🔁 轉檔：已帶入「{path}」，種類＝{dict(CONV_KINDS).get(kind, kind)}；確認數量後按加入')
+        except Exception: ENG.log.err('🗺 → 轉檔')
+
+
 class DashPage(QWidget):
     """📊 一頁總覽（電腦版）：SortCut／FileCompare／H265 三種，資料從 vs_dash 一次算好（20 秒快取），這頁看得到時 15 秒更新一次."""
     def __init__(self, win):
@@ -8271,7 +8498,7 @@ class NavList(QListWidget):
     """左邊選單。分組標題也是一列，所以「第幾列」≠「第幾頁」：對外 setCurrentRow(頁)、currentRow() 都用頁碼."""
     GROUPS = [('① 檔案管理（16 格快速檢索）', '#2f9bff', [(71, 'FileCompare 總覽', '📊'), (44, '影片快速分類（16 格）', '🎞'), (40, '整理總覽', '🏠'), (43, '整理精靈', '🚀'), (45, '資料夾包', '📦'), (50, '搜尋篩選', '🔎')]),
               ('② 檔案剪輯（10 秒一張截圖）', '#4dc9ff', [(70, 'VideoSift 總覽', '📊'), (0, '檔案總管＋初剪', '▦'), (6, '操作紀錄', '📒')]),
-              ('③ 畫質降容量（SSIM）', '#f0ad4e', [(72, 'H265 總覽', '📊'), (1, '轉檔（H.265）', '🔁'), (57, '影片瘦身（畫質目標）', '🗜'), (14, '滾動式參數', '📈'), (13, '碼率測試', '🧪')]),
+              ('③ 畫質降容量（SSIM）', '#f0ad4e', [(72, 'H265 總覽', '📊'), (74, '檔案總覽（哪裡最大・搜尋）', '🗺'), (1, '轉檔（H.265）', '🔁'), (57, '影片瘦身（畫質目標）', '🗜'), (14, '滾動式參數', '📈'), (13, '碼率測試', '🧪')]),
               ('④ 隔離區・壞掉的檔（待修）', '#ff6b6b', [(49, '損毀檢查', '🩺'), (66, 'SortCut 讀不了的影片', '⚠'), (51, '隔離區', '🧺'), (52, '雜物清理', '🧹'), (25, 'HotZone 保管區', '🛟')]),
               ('⑤ 重複檔案', '#b48cff', [(47, '重複檔', '🔁'), (48, '重複資料夾', '📁'), (46, '重複資料夾最佳解', '🧭'), (24, 'HotZone 重複檔', '👯')]),
               ('⑥ 照片分類與找圖', '#ff7eb6', [(53, '相似／連拍', '🖼'), (54, '依日期整理', '📅'), (55, '時間軸', '🗓'), (56, '照片地圖', '🗺'), (59, '活動', '🧳'), (60, '最愛', '⭐'),
@@ -8694,6 +8921,7 @@ class Main(QMainWindow):
         self.fcp = FCEmbedPage(self); self.stack.addWidget(self.fcp)                     # 第 17 個：🗂 整理（FileCompare 整套，V0.5.00）
         self.dash = DashPage(self); self.stack.addWidget(self.dash)                       # 第 18 個：📊 一頁總覽（SortCut／FileCompare／H265，V0.5.70）
         self.rsp = RSplitPage(self); self.stack.addWidget(scroll_wrap(self.rsp))           # 第 19 個：🚚 R 碟清空搬移（V0.5.85）
+        self.explore = ExplorePage(self); self.stack.addWidget(self.explore)                 # 第 20 個：🗺 檔案總覽（V0.6.19）
         self.stack.setMinimumWidth(420); self.stat.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.nav.setCurrentRow(0)
         self.b_bg.clicked.connect(lambda: self.nav.setCurrentRow(2)); self.b_hide.clicked.connect(self.to_tray); self.b_perf.toggled.connect(self.perf)
@@ -9595,6 +9823,13 @@ class Main(QMainWindow):
             try: self.ptitle.setText('🗄 R 碟清空搬移（封存）')
             except Exception: pass
             ENG.log.w('畫面：切到「🚚 R 碟清空搬移」'); self.rsp.refresh(); return
+        if i == 74 and hasattr(self, 'explore'):                                 # V0.6.19 🗺 檔案總覽
+            self.stack.setCurrentIndex(20)
+            if self._cover_ready and self.outer.currentIndex() == 0: self.outer.setCurrentIndex(1)
+            if self._cover_ready: ENG.cfg.set('last_page', int(i))
+            try: self.ptitle.setText('🗺 檔案總覽')
+            except Exception: pass
+            ENG.log.w('畫面：切到「🗺 檔案總覽」'); self.explore.refresh(); return
         if i in (70, 71, 72) and hasattr(self, 'dash'):                          # 📊 一頁總覽
             self.stack.setCurrentIndex(18)
             if self._cover_ready and self.outer.currentIndex() == 0: self.outer.setCurrentIndex(1)

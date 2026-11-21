@@ -5411,6 +5411,76 @@ class Engine:
         ids = [int(r[0]) for r in self.db.q(f'SELECT id FROM files WHERE {w} ORDER BY {self.CONV_SORT.get(sort, "size DESC")}' + (' LIMIT ?' if lim > 0 else ''), (*a, lim) if lim > 0 else a)]
         n = self.conv_add(ids); self.log.w(f'轉檔：照範圍加入 {n} 部（類型 {exts or "全部"}、大小 {smin or 0}～{smax or "不限"} MB、資料夾 {folders or "全部"}、排序 {sort}' + (f'、只取前 {lim} 部' if lim > 0 else '') + '）'); return n
 
+    # ================================================================ 🗂 檔案總覽（V0.6.19：像 Everything 搜尋 ＋ TreeSize 資料夾大小）
+    @staticmethod
+    def _like_esc(t): return str(t).replace('^', '^^').replace('%', '^%').replace('_', '^_')
+
+    def explore(self, prefix='', sort='size'):
+        """一層一層看：prefix＝''（看每個影片庫根目錄）或某個資料夾；回這一層底下每個子資料夾的大小、檔數、能轉幾部、預估省多少.
+        sort：size（大小）／n（檔數）／save（可省）／name（名稱）."""
+        prefix = str(prefix or '').rstrip('\\/')
+        ck = (prefix.lower(), sort); C = getattr(self, '_exp_cache', None)
+        if C is None: C = self._exp_cache = {}
+        hit = C.get(ck)
+        if hit and time.time() - hit[0] < 30: return hit[1]
+        ratio = (self.conv_ratio() or (0.5, 0))[0] or 0.5
+        cw, ca = self.conv_where(None, 0, 0, None, (0, 4, 5), 'all')
+        if not prefix:
+            rows = self.db.q("SELECT root, COUNT(*), SUM(size) FROM files WHERE missing=0 GROUP BY root")
+            crow = {r[0]: (r[1], r[2]) for r in self.db.q(f"SELECT root, COUNT(*), SUM(size) FROM files WHERE {cw} GROUP BY root", ca)}
+            items = []
+            for r in rows:
+                if not r[0]: continue
+                cn, cb = crow.get(r[0], (0, 0))
+                items.append({'name': str(r[0]), 'path': str(r[0]), 'n': int(r[1] or 0), 'size': int(r[2] or 0), 'conv_n': int(cn or 0), 'conv_b': int(cb or 0), 'save': int((cb or 0) * (1 - min(1.0, ratio))), 'dir': True})
+            here = {'n': 0, 'size': 0}
+        else:
+            eq = prefix + '\\' if prefix.endswith(':') else prefix               # 磁碟根目錄（H:）的資料夾欄位是 H:\\
+            lk = self._like_esc(eq.rstrip('\\')) + '\\%'
+            wh = "(folder=? OR folder LIKE ? ESCAPE '^')"
+            agg = {}; here = {'n': 0, 'size': 0, 'conv_n': 0, 'conv_b': 0}
+            def key(folder):
+                rel = str(folder or '')[len(eq):].lstrip('\\/')
+                return rel.split('\\')[0].split('/')[0] if rel else ''
+            for f, n, b in self.db.q(f"SELECT folder, COUNT(*), SUM(size) FROM files WHERE missing=0 AND {wh} GROUP BY folder", (eq, lk)):
+                k = key(f); d = agg.setdefault(k, {'n': 0, 'size': 0, 'conv_n': 0, 'conv_b': 0}); d['n'] += int(n or 0); d['size'] += int(b or 0)
+            for f, n, b in self.db.q(f"SELECT folder, COUNT(*), SUM(size) FROM files WHERE {cw} AND {wh} GROUP BY folder", (*ca, eq, lk)):
+                k = key(f); d = agg.setdefault(k, {'n': 0, 'size': 0, 'conv_n': 0, 'conv_b': 0}); d['conv_n'] += int(n or 0); d['conv_b'] += int(b or 0)
+            items = []
+            for k, d in agg.items():
+                if k == '': here = d; continue
+                items.append({'name': k, 'path': eq.rstrip('\\') + '\\' + k, **d, 'save': int(d['conv_b'] * (1 - min(1.0, ratio))), 'dir': True})
+            here = {**here, 'save': int(here.get('conv_b', 0) * (1 - min(1.0, ratio)))}
+        keyf = {'n': lambda x: -x['n'], 'save': lambda x: -x['save'], 'name': lambda x: x['name'].lower()}.get(sort, lambda x: -x['size'])
+        items.sort(key=keyf)
+        tot = {'n': sum(x['n'] for x in items) + int(here.get('n') or 0), 'size': sum(x['size'] for x in items) + int(here.get('size') or 0),
+               'conv_n': sum(x.get('conv_n', 0) for x in items) + int(here.get('conv_n') or 0), 'save': sum(x.get('save', 0) for x in items) + int(here.get('save') or 0)}
+        parent = ''
+        if prefix:
+            r_ = self.root_of(prefix) if hasattr(self, 'root_of') else None
+            if not (r_ and os.path.normcase(prefix.rstrip('\\/')) == os.path.normcase(str(r_).rstrip('\\/'))) and '\\' in prefix:
+                parent = prefix.rsplit('\\', 1)[0]
+        out = {'ok': True, 'prefix': prefix, 'parent': parent, 'items': items, 'here': here, 'tot': tot, 'ratio': ratio, 'sort': sort, 't': time.time()}
+        C[ck] = (time.time(), out)
+        if len(C) > 200: C.clear()
+        return out
+
+    def explore_search(self, q, prefix='', sort='size', limit=500):
+        """像 Everything：空白分開的每個字都要出現在完整路徑裡（不分大小寫）；可以限定在某個資料夾底下."""
+        toks = [t for t in str(q or '').lower().split() if t][:8]
+        if not toks: return {'ok': True, 'rows': [], 'more': False}
+        w = ['missing=0']; a = []
+        for t in toks: w.append("lower(path) LIKE ? ESCAPE '^'"); a.append('%' + self._like_esc(t) + '%')
+        prefix = str(prefix or '').rstrip('\\/')
+        if prefix:
+            eq = prefix + '\\' if prefix.endswith(':') else prefix
+            w.append("(folder=? OR folder LIKE ? ESCAPE '^')"); a += [eq, self._like_esc(eq.rstrip('\\')) + '\\%']
+        order = {'name': 'name COLLATE NOCASE', 'mtime': 'mtime DESC', 'path': 'path COLLATE NOCASE'}.get(sort, 'size DESC')
+        lim = max(10, min(5000, int(limit or 500)))
+        R = self.db.q(f"SELECT id, path, name, folder, ext, size, mtime, vcodec, cv_state FROM files WHERE {' AND '.join(w)} ORDER BY {order} LIMIT ?", (*a, lim + 1))
+        rows = [{'id': int(r[0]), 'path': r[1], 'name': r[2], 'folder': r[3], 'ext': r[4], 'size': int(r[5] or 0), 'mtime': float(r[6] or 0), 'vcodec': r[7] or '', 'cv': int(r[8] or 0)} for r in R[:lim]]
+        return {'ok': True, 'rows': rows, 'more': len(R) > lim, 'n': len(rows), 'sum': sum(x['size'] for x in rows)}
+
     def conv_plan(self, exts=None, smin=0, smax=0, folders=None, sort='size_desc', kind='nonmp4', n=0, target_gb=0):
         """V0.6.11 📏 數量／目標：範圍內最大最小檔、前 n 部的大小區間和預估省；給目標（GB）就算出要轉幾部.
         預估省：有📈同類經驗用同類的比例，沒有用全部平均（跟清單上的「預估省」一樣）."""

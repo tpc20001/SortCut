@@ -916,6 +916,15 @@ class WebServer:
             E.cfg.set('shrink_goal', G); E.log.w(f'📱 手機：瘦身目標 {G}')
         return jresp({'ok': True, 'goal': E.goal_view()})
 
+    def api_explore(self, req):
+        """V0.6.19 🗺 檔案總覽：GET prefix（空＝每個影片庫）、sort（size／n／save／name）；q＝搜尋（像 Everything）."""
+        E = self.E(); q = req.q('q', '') or ''; pf = req.q('prefix', '') or ''; so = req.q('sort', 'size') or 'size'
+        try:
+            if q.strip(): return jresp(E.explore_search(q, pf, so, int(req.q('limit', '300') or 300)))
+            return jresp(E.explore(pf, so))
+        except Exception as ex:
+            E.log.err('🗺 檔案總覽'); return jresp({'ok': False, 'message': f'讀不到：{ex}'})
+
     def api_conv2(self, req):
         """🔁 轉檔工作區：選檔（種類／類型／大小／資料夾／排序）、轉檔中、轉檔完成（刪原檔、搬回）、失敗."""
         E = self.E()

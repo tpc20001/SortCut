@@ -25,13 +25,34 @@ def pump(sec):
     while time.time() < t: QApplication.processEvents(); time.sleep(0.02)
 
 
+def no_modal():
+    """雲端沒有人按：所有會「等人按」的視窗直接回預設值，不然測試會卡住到逾時."""
+    from PySide6.QtWidgets import QMessageBox, QDialog, QMenu, QFileDialog, QInputDialog
+    for nm in ('question', 'information', 'warning', 'critical', 'about'):
+        setattr(QMessageBox, nm, staticmethod(lambda *a, **k: QMessageBox.No))
+    QMessageBox.exec = lambda self, *a, **k: 0
+    QDialog.exec = lambda self, *a, **k: (self.show(), 0)[1]
+    QMenu.exec = lambda self, *a, **k: None
+    QFileDialog.getExistingDirectory = staticmethod(lambda *a, **k: '')
+    QFileDialog.getOpenFileName = staticmethod(lambda *a, **k: ('', ''))
+    QFileDialog.getOpenFileNames = staticmethod(lambda *a, **k: ([], ''))
+    QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: ('', ''))
+    QInputDialog.getText = staticmethod(lambda *a, **k: ('', False))
+    QInputDialog.getInt = staticmethod(lambda *a, **k: (0, False))
+    QInputDialog.getItem = staticmethod(lambda *a, **k: ('', False))
+
+
 def step(name, fn):
+    print('  ▶', name, flush=True)
     try: fn(); pump(0.3); print('  ✔', name, flush=True)
     except Exception: ERR.append(f'{name}\n{traceback.format_exc()}'); print('  ✖', name, flush=True)
 
 
 def main():
+    import faulthandler
+    faulthandler.dump_traceback_later(300, exit=True)                           # 卡住 5 分鐘：印出卡在哪一行再結束（看 LOG 就知道）
     from PySide6.QtWidgets import QApplication
+    no_modal()
     import app as A
     import core
     qa = QApplication.instance() or QApplication(sys.argv)
