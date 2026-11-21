@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.23'
+APP_VERSION = '0.6.24'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6465,6 +6465,10 @@ class ExplorePage(QWidget):
         self.tw_big = QTreeWidget(); self.tw_big.setRootIsDecorated(False); self.tw_big.setAlternatingRowColors(True); self.tw_big.setHeaderLabels(['檔名', '大小', '資料夾', '編碼'])
         self.tw_big.itemDoubleClicked.connect(self._dbl); self.tw_big.setContextMenuPolicy(Qt.CustomContextMenu); self.tw_big.customContextMenuRequested.connect(lambda pos: self._ctx(pos, self.tw_big))
         self.tabs.addTab(self.tw_big, '🐘 最大的 20 個檔')
+        self.tw_hot = QTreeWidget(); self.tw_hot.setRootIsDecorated(False); self.tw_hot.setAlternatingRowColors(True); self.tw_hot.setHeaderLabels(['資料夾', '轉完預估省', '能轉', '大小', '位置'])
+        self.tw_hot.itemDoubleClicked.connect(lambda it, _c: self.menu_for((it.data(0, Qt.UserRole) or ('', {}))[1], None))
+        self.tw_hot.setContextMenuPolicy(Qt.CustomContextMenu); self.tw_hot.customContextMenuRequested.connect(lambda pos: self._ctx(pos, self.tw_hot))
+        self.tabs.addTab(self.tw_hot, '💡 最值得轉的')
         self.mix = QLabel(); self.mix.setTextFormat(Qt.RichText); self.mix.setWordWrap(True); self.mix.setAlignment(Qt.AlignTop | Qt.AlignLeft); self.mix.setMargin(10)
         self.tabs.addTab(scroll_wrap(self.mix), '🎞 編碼／格式')
         sp.addWidget(self.tabs); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
@@ -6535,6 +6539,13 @@ class ExplorePage(QWidget):
             it = QTreeWidgetItem([r['name'], core.fmt_b(r['size']), r['folder'], (r.get('vcodec') or '').upper() + ('・✔ 轉好' if r.get('cv') == 3 else '')])
             it.setData(0, Qt.UserRole, ('f', r)); it.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter); self.tw_big.addTopLevelItem(it)
         for c, w in ((0, 380), (1, 90), (2, 380)): self.tw_big.setColumnWidth(c, w)
+        self.tw_hot.clear()                                                      # V0.6.24 💡 最值得轉的資料夾（按兩下＝轉檔選單）
+        for x in j.get('hot') or []:
+            it = QTreeWidgetItem([f"📁 {x['name']}", core.fmt_b(x['save']), f"{x['conv_n']:,}", core.fmt_b(x['conv_b']), x['path']])
+            it.setData(0, Qt.UserRole, ('d', x)); it.setForeground(1, QColor('#3fb37f'))
+            for c in (1, 2, 3): it.setTextAlignment(c, Qt.AlignRight | Qt.AlignVCenter)
+            self.tw_hot.addTopLevelItem(it)
+        for c, w in ((0, 260), (1, 100), (2, 70), (3, 90)): self.tw_hot.setColumnWidth(c, w)
         def bars(L, lab):
             h = '<table width="100%" cellspacing="0" cellpadding="3">'
             for i, x in enumerate(L):
