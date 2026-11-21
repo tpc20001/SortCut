@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.15'
+APP_VERSION = '0.6.16'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -7903,7 +7903,9 @@ def hot_update(win, pkg):
         shutil.rmtree(code / '__pycache__', ignore_errors=True)
     except Exception as ex:
         _restore_files(backup); upd_log(f'熱更新失敗（寫檔）：{ex}\n{traceback.format_exc()}')
-        QMessageBox.warning(win, '更新失敗', f'寫入新程式失敗，已還原，程式照常使用：\n{ex}'); return False
+        try: win.msg(f'⚠ 更新失敗：寫入新程式失敗，已還原，程式照常使用（{ex}）', 20000)   # V0.6.16 不跳視窗
+        except Exception: pass
+        return False
     mods = sorted({p.stem for p in code.glob('*.py')} - {'app'}); saved = {m: sys.modules.get(m) for m in mods}
     new_eng = None
     try:
@@ -8879,18 +8881,15 @@ class Main(QMainWindow):
         st = {'g': 0, 't': 0}
 
         def job():
-            z = '' if I.get('shell_only') else CU.download(I['zip'], ROOT / 'UPDATE' / Path(I['zip']).name.split('?')[0], I.get('zip_sha256', ''), cb=lambda g, t: st.update(g=g, t=t))
-            sh = None
-            if I.get('need_shell') and I.get('shell'):
-                sh = CU.download(I['shell'], ROOT / 'UPDATE' / 'shell' / Path(I['shell']).name.split('?')[0], I.get('shell_sha256', ''), cb=lambda g, t: st.update(g=g, t=t))
-            return str(z), (str(sh) if sh else '')
+            z = CU.download(I['zip'], ROOT / 'UPDATE' / Path(I['zip']).name.split('?')[0], I.get('zip_sha256', ''), cb=lambda g, t: st.update(g=g, t=t))
+            return str(z), ''                                                   # V0.6.16 使用者不要換外殼：永遠只下載程式包、熱更新
 
         def prog():
             if self._cloud_busy and st['t']: self.msg(f"☁ 下載 V{v}：{st['g'] * 100 // max(1, st['t'])}%（{fmt_b(st['g'])}／{fmt_b(st['t'])}）", 3000); QTimer.singleShot(1000, prog)
         QTimer.singleShot(1000, prog)
 
         def fail(ex):
-            self._cloud_busy = False; upd_log(f'雲端更新下載失敗：{ex}'); QMessageBox.warning(self, '☁ 更新', f'下載失敗：{ex}\n\n程式維持原版本，可以稍後再按一次。')
+            self._cloud_busy = False; upd_log(f'雲端更新下載失敗：{ex}'); self.msg(f'☁ 下載失敗：{ex}（程式維持原版本，可以再按一次）', 15000)   # V0.6.16 不跳視窗（手機按的也看得到狀態）
 
         def ok(res):
             self._cloud_busy = False; zp, shp = res; self._upd_seen.add(str(zp)); upd_log(f'雲端更新：下載好了 {zp}' + (f'、外殼 {shp}' if shp else ''))
@@ -8901,10 +8900,10 @@ class Main(QMainWindow):
                 busy = len(ENG.cv_active) + len(ENG.th_active) + (1 if ENG.cut_cur else 0)
                 if busy and QMessageBox.question(self, '☁ 更新', f'還有 {busy} 個工作在做（重開後會接著做）。確定現在更新？') != QMessageBox.Yes: return
                 CU.run_bat(bat); upd_log('雲端更新：交給外殼更新程式，SortCut 關閉'); self.quitting = True; mark_clean_exit(); self.close(); return
-            if I.get('shell_only'): return
-            if not self.upd.load(zp): self.nav.setCurrentRow(5); return
-            if self.upd.pkg.get('hot_ok'): self.upd.go()
-            else: self.upd.restart_way()
+            if not zp: return
+            if not self.upd.load(zp): self.msg('☁ 更新包不能用（LOG\\update_log.txt 有原因）', 15000); return
+            if self.upd.pkg.get('hot_ok'): self.upd.go(confirm=False)          # V0.6.16 不用再到電腦按確認：直接熱更新（手機按就好）
+            else: upd_log('雲端更新：這個版本不能熱更新，先放在 UPDATE，下次開程式時套用'); self.msg('☁ 這版不能熱更新：下次開程式時自動套用', 15000)
         bg(job, ok, fail)
 
     def _ubar_later(self):
@@ -8921,7 +8920,7 @@ class Main(QMainWindow):
             self.ubar.hide(); self.ubar_go.setText('⚡ 立即熱更新'); self.ubar_no.setText('稍後'); return self._cloud_go()
         self.ubar.hide(); self._upd_seen.add(self._ubar_path)
         if not self.upd.load(self._ubar_path): self.nav.setCurrentRow(5); return
-        if self.upd.pkg.get('hot_ok'): self.upd.go()
+        if self.upd.pkg.get('hot_ok'): self.upd.go(confirm=False)              # V0.6.16 已經按了「更新」就不再問一次
         else: self.upd.restart_way()
 
     def _mk_icon(self):

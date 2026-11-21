@@ -1465,7 +1465,7 @@ class WebServer:
             if not r.get('newer'): return jresp({'ok': False, 'message': '沒有比較新的版本（先按「檢查」）'})
             E.log.w(f'📱 手機：按了雲端更新 V{r["info"]["version"]}')
             self._ui(lambda: self.ui_later(W._cloud_go))
-            return jresp({'ok': True, 'message': f'電腦開始下載 V{r["info"]["version"]}，下載好會自動熱更新（要換 EXE 的話電腦上會先問）'})
+            return jresp({'ok': True, 'message': f'電腦開始下載 V{r["info"]["version"]}，下載好自動熱更新（程式不用關、電腦上不用按）；大約 30 秒後重新整理就是新版'})
         return jresp({'ok': False, 'message': '不認得的動作'})
 
     def ui_later(self, fn):
