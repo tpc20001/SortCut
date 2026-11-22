@@ -50,6 +50,8 @@ jobs:
           python -m pip install --disable-pip-version-check -q "PySide6>=6.8,<7" pyinstaller
       - name: 檢查程式檔
         run: python -c "import py_compile,pathlib; [py_compile.compile(str(f), doraise=True) for f in pathlib.Path('app').glob('*.py')]; [py_compile.compile(str(f), doraise=True) for f in pathlib.Path('build').glob('*.py')]; print('all program files OK')"
+      - name: 檢查模組（舊 EXE 裡沒有的不能用，熱更新才不會失敗）
+        run: python tools/check_imports.py
       - name: 電腦版畫面測試（真的開起來，有錯就不發版）
         timeout-minutes: 8
         env:

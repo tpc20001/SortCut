@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
 
-APP_VERSION = '0.6.30'
+APP_VERSION = '0.6.31'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -21,7 +21,11 @@ import core  # noqa: E402
 import vs_web  # noqa: E402  V0.1.49 手機網頁
 import vs_face  # noqa: E402  V0.1.51 人物
 from core import fmt_t, fmt_b  # noqa: E402
-import html as _html  # noqa: E402
+class _html:                                                                    # V0.6.31 不能 import html：舊的 EXE 裡沒有這個模組（熱更新只換程式，不換 EXE）
+    @staticmethod
+    def escape(s, quote=True):
+        s = str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        return s.replace('"', '&quot;').replace("'", '&#x27;') if quote else s
 
 ROOT = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else HERE.parent
 SELFTEST = bool(os.environ.get('VIDEOSIFT_SELFTEST'))
@@ -4413,8 +4417,7 @@ class RsDiskW(QWidget):
 
 
 def _hesc(x):
-    import html as _h
-    return _h.escape(str(x))
+    return _html.escape(str(x))                                                 # V0.6.31 舊 EXE 沒有 html 模組
 
 
 class RSplitPage(QWidget):
