@@ -759,7 +759,7 @@ function stepFile(d){if(!F.f)return;const R=F.review;if(R){const i=R.i+d;if(i<0|
 function paintFile(){if(!F.f||!$('#fov'))return;const f=F.f;$$('#gb button').forEach(b=>b.classList.toggle('on',b.dataset.g===(f.grade||'')));
   $('#bfav').textContent=f.fav?'★ 已收藏記號':'☆ 收藏記號';$('#bview').textContent=f.viewed?'✔ 看過':'• 沒看過';$('#btag').textContent=(TAGS[f.tag]||'🏷')+' 標籤';$('#bnote').textContent='✎ 備註'+(f.note?'：'+f.note.slice(0,10):'')}
 function paintRange(){const b=$('#brange');if(!b)return;b.textContent='↔ 範圍'+(F.range?'：開':'');b.classList.toggle('on',F.range);
-  $('#thelp').textContent=F.range?'點起點、再點終點＝整段':(matchMedia('(pointer:fine)').matches?'點選、拖曳連選、Shift 連選、點兩下播放':'點選；長按播放；兩指捏合＝一列幾張')}
+  $('#thelp').textContent=F.range?'點起點、再點終點＝整段':(matchMedia('(pointer:fine)').matches?'點選、拖曳連選、Shift 連選、點兩下播放':'點一下選；按住到震動不放往下拉＝連選（從已選的開始拉＝取消）；按住 2 秒＝播放；兩指捏合＝一列幾張')}
 function setTcols(n){n=Math.max(2,Math.min(30,n|0));if(n===F.tcols)return;const top=topTile();F.tcols=n;LS.set('tcols',n);const s=$('#tc');if(s)s.value=String(n);
   const g=$('#tiles');g.style.setProperty('--vgc',n);g.classList.toggle('small',n>=8);if(top>=0){const el=$(`#tiles .vgT[data-i="${top}"]`);const ov=$('#fov');if(el&&ov)ov.scrollTop=el.offsetTop-$('.rph',ov).offsetHeight}}
 function topTile(){const ov=$('#fov');if(!ov)return -1;const y=ov.scrollTop+$('.rph',ov).offsetHeight;for(const el of $$('#tiles .vgT')){if(el.offsetTop+el.offsetHeight>y)return +el.dataset.i}return -1}
@@ -770,22 +770,36 @@ function drawTiles(){const f=F.f,el=$('#tiles');if(!el)return;el.style.setProper
   const cols=f.th_cols||10,rows=f.th_rows||10,{m,n}=tileCount(),ar=(f.w&&f.h)?(f.w/f.h):16/9;let h='';
   const BT=(f.bm||[]).map(x=>x[0]),HL=new Set(F.hl||[]),SC=new Set(F.sc||[]),ST=new Set((F.st||[]).flatMap(([a,z])=>Array.from({length:z-a+1},(_,k)=>a+k)));   // V0.2.97 🔖 有書籤的格子右上角黃色標記；V0.3.09 🎬 換場景的格子左邊橘線
   for(let i=0;i<n;i++){const hb=BT.some(t=>t>=i*F.gs&&t<(i+1)*F.gs);let sc=false,stc=true,hot=false;for(let q=i*m;q<i*m+m;q++){if(SC.has(q))sc=true;if(!ST.has(q))stc=false;if(HL.has(q))hot=true}h+=`<div class="vgT ${F.sel.has(i)?'on':''}${sc?' scn':''}${stc&&ST.size?' stc':''}${hot?' hot':''}" data-i="${i}" style="aspect-ratio:${ar};${tileCSS(f.id,i*m,cols,rows)}"><b>${fmtT(i*F.gs)}</b>${hb?'<i class="bmk" style="position:absolute;top:2px;right:2px;width:8px;height:12px;background:#ffc94d;border-radius:2px;pointer-events:none"></i>':''}</div>`}el.innerHTML=h;fixAR(el,f)}
-function tileEvents(G){let drag=null,lp=null,skip=false;
+function tileEvents(G){let drag=null,lp=null,skip=false,lastPT='mouse',td=null;
   const at=e=>{const t=e.target&&e.target.closest?e.target.closest('.vgT'):null;return t?+t.dataset.i:-1};
   const set=(i,on)=>{if(i<0)return;on?F.sel.add(i):F.sel.delete(i);const t=$(`#tiles .vgT[data-i="${i}"]`);if(t)t.classList.toggle('on',on)};
-  G.addEventListener('pointerdown',e=>{const i=at(e);if(i<0)return;
+  G.addEventListener('pointerdown',e=>{lastPT=e.pointerType;const i=at(e);if(i<0)return;
     if(e.pointerType==='mouse'){if(e.button!==0||F.range)return;e.preventDefault();skip=true;
       if(e.shiftKey&&F.last>=0){const a=Math.min(F.last,i),b=Math.max(F.last,i);for(let k=a;k<=b;k++)set(k,true);F.last=i;cutBar();return}
       const on=!F.sel.has(i);set(i,on);F.last=i;drag={on,i};cutBar();return}
-    clearTimeout(lp);const x0=e.clientX,y0=e.clientY;lp=setTimeout(()=>{lp=null;skip=true;vib();preview(i)},550);
-    const mv=ev=>{if(Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)>12){clearTimeout(lp);lp=null}};G.addEventListener('pointermove',mv,{passive:true});
-    const up=()=>{clearTimeout(lp);G.removeEventListener('pointermove',mv)};G.addEventListener('pointerup',up,{once:true});G.addEventListener('pointercancel',up,{once:true})});
+    });
+  // V0.6.32 手機：點一下＝選／取消；按住 0.45 秒（震一下）不放直接拖＝連選（從已選的格子開始拖＝整段取消）；按住 2 秒不動＝播放。不再用點兩下播放
+  const tAt=(x,y)=>{const el=document.elementFromPoint(x,y);const t=el&&el.closest?el.closest('#tiles .vgT'):null;return t?+t.dataset.i:-1};
+  const tFill=i=>{if(!td||!td.drag||i<0)return;const a=Math.min(td.i0,i),b=Math.max(td.i0,i);
+    for(const k of td.touched)if(k<a||k>b){set(k,td.orig.get(k));td.touched.delete(k)}
+    for(let k=a;k<=b;k++){if(!td.orig.has(k))td.orig.set(k,F.sel.has(k));set(k,td.on);td.touched.add(k)}td.cur=i;F.last=i;cutBar()};
+  const tStop=()=>{if(!td)return;clearTimeout(td.t1);clearTimeout(td.t2);clearInterval(td.as);td=null};
+  G.addEventListener('touchstart',e=>{if(e.touches.length!==1){tStop();return}const t=e.touches[0],i=tAt(t.clientX,t.clientY);if(i<0)return;tStop();
+    td={i0:i,x0:t.clientX,y0:t.clientY,y:t.clientY,drag:false,moved:false,on:true,orig:new Map(),touched:new Set(),cur:i,as:0};
+    td.t1=setTimeout(()=>{if(!td)return;td.drag=true;skip=true;vib();td.on=!F.sel.has(i);tFill(i);
+      td.as=setInterval(()=>{if(!td||!td.drag)return;const ov=$('#fov');if(!ov)return;const r=ov.getBoundingClientRect(),y=td.y,ed=70;   // 手指靠近上下邊緣：自動捲動
+        const v=y>r.bottom-ed?(y-(r.bottom-ed)):y<r.top+ed+60?-((r.top+ed+60)-y):0;if(v){ov.scrollTop+=v/4;tFill(tAt(td.x0,td.y))}},30)},450);
+    td.t2=setTimeout(()=>{if(!td||td.moved)return;for(const k of td.touched)set(k,td.orig.get(k));const i0=td.i0;tStop();skip=true;cutBar();vib();preview(i0)},2000)},{passive:true});
+  G.addEventListener('touchmove',e=>{if(!td)return;const t=e.touches[0],d=Math.abs(t.clientX-td.x0)+Math.abs(t.clientY-td.y0);
+    if(!td.drag){if(d>12)tStop();return}
+    e.preventDefault();td.y=t.clientY;if(d>12)td.moved=true;tFill(tAt(t.clientX,t.clientY))},{passive:false});
+  G.addEventListener('touchend',()=>{if(td&&td.drag)skip=true;tStop()},{passive:true});G.addEventListener('touchcancel',tStop,{passive:true});
   G.addEventListener('pointerover',e=>{if(!drag)return;const i=at(e);if(i<0||i===drag.i)return;const a=Math.min(drag.i,i),b=Math.max(drag.i,i);for(let k=a;k<=b;k++)set(k,drag.on);drag.i=i;F.last=i;cutBar()});
   document.addEventListener('pointerup',()=>{drag=null});
   G.addEventListener('click',e=>{if(skip){skip=false;return}const i=at(e);if(i<0)return;
     if(F.range){if(F.anchor===null){F.anchor=i;drawSel();return}const a=Math.min(F.anchor,i),b=Math.max(F.anchor,i),add=!(F.sel.has(i)&&F.sel.has(F.anchor));for(let k=a;k<=b;k++)set(k,add);F.anchor=null;F.last=i;drawSel();cutBar();return}
     set(i,!F.sel.has(i));F.last=i;cutBar()});
-  G.addEventListener('dblclick',e=>{const i=at(e);if(i<0)return;e.preventDefault();cutBar();preview(i)});
+  G.addEventListener('dblclick',e=>{if(lastPT!=='mouse')return;const i=at(e);if(i<0)return;e.preventDefault();cutBar();preview(i)});   // 點兩下播放只給滑鼠
   G.addEventListener('contextmenu',e=>{if(at(e)>=0)e.preventDefault()})}
 function drawSel(){$$('#tiles .vgT').forEach(t=>{const i=+t.dataset.i;t.classList.toggle('on',F.sel.has(i));t.classList.toggle('anchor',F.anchor===i)})}
 function segs(){const L=[...F.sel].sort((a,b)=>a-b),out=[],dur=F.f?F.f.dur||0:0;let a=null,p=null;
