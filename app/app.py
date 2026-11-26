@@ -11,9 +11,9 @@ from PySide6.QtGui import (QPainter, QColor, QPixmap, QImage, QIcon, QFont, QPen
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QListWidget, QListWidgetItem,
                                QTreeWidget, QTreeWidgetItem, QSplitter, QStackedWidget, QScrollArea, QComboBox, QSpinBox, QCheckBox, QLineEdit, QFileDialog,
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
-                               QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip)
+                               QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.33'
+APP_VERSION = '0.6.34'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -5135,6 +5135,15 @@ class SetPage(QWidget):
                                 '也可以在檔案總管左邊的資料夾上按右鍵 →「🚫 排除這個資料夾」。'))
         e1.clicked.connect(self._ex_add_dir); e2.clicked.connect(lambda: (exclude_name(self.win, self.ex_nm.text()), self.ex_nm.clear()))
         self.ex_nm.returnPressed.connect(lambda: (exclude_name(self.win, self.ex_nm.text()), self.ex_nm.clear())); e3.clicked.connect(self._ex_del)
+        g = QGroupBox('🖱 滑鼠滾輪（檔案總管、清單、每一頁都一樣）'); f = QFormLayout(g); v.addWidget(g)      # V0.6.34
+        self.wh_m = QComboBox()
+        for x_ in WheelBoost.STEPS: self.wh_m.addItem(f'×{x_:g}' + ('（原本的速度）' if x_ == 1 else '（慢一點）' if x_ < 1 else ''), x_)
+        self.wh_m.setCurrentIndex(max(0, WheelBoost.STEPS.index(WheelBoost.mult()) if WheelBoost.mult() in WheelBoost.STEPS else 2))
+        self.wh_s = QCheckBox('絲滑（緩進緩出，連續滾不會一頓一頓）'); self.wh_s.setChecked(WheelBoost.smooth())
+        self.wh_m.currentIndexChanged.connect(lambda _i: (ENG.cfg.set('wheel_mult', float(self.wh_m.currentData())), self.win.msg(f'🖱 滾輪 ×{self.wh_m.currentData():g}')))
+        self.wh_s.toggled.connect(lambda on: ENG.cfg.set('wheel_smooth', bool(on)))
+        f.addRow('捲動速度', self.wh_m); f.addRow(self.wh_s)
+        f.addRow(self._note('Ctrl＋滾輪（一列幾張）、Alt＋滾輪、時間軸、音量這些自己的滾輪功能照舊。手機網頁的電腦版（瀏覽器）在右下角另外調。'))
         g = QGroupBox('預覽圖（背景慢慢做，最低優先權，不搶你在用的程式）'); f = QFormLayout(g); v.addWidget(g)
         self.th_on = QCheckBox('開著（關掉＝不做新的預覽圖）'); self.th_n = QSpinBox(); self.th_n.setRange(1, 8); self.th_n.setSuffix(' 部同時')
         self.th_step = QComboBox()
@@ -8927,9 +8936,96 @@ def pc_badge(icon):
         return icon
 
 
+class WheelBoost(QObject):
+    """V0.6.34 滾輪速度＋絲滑（參考 TikLive V1.1.29／1.1.31）：所有可以捲的清單、方格、頁面都套用.
+    cfg wheel_mult＝倍數（×0.5～×8），wheel_smooth＝緩進緩出動畫。Ctrl／Alt／Shift＋滾輪、觸控板照舊（各自的放大縮小功能不受影響）."""
+    STEPS = [0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8]
+
+    def __init__(self):
+        super().__init__(); self.an = {}; self.tm = QTimer(self); self.tm.setInterval(12); self.tm.timeout.connect(self._tick)
+
+    @staticmethod
+    def mult():
+        try: return max(0.5, min(8.0, float(ENG.cfg.get('wheel_mult') or 1)))
+        except Exception: return 1.0
+
+    @staticmethod
+    def smooth(): return ENG.cfg.get('wheel_smooth') is not False
+
+    def eventFilter(self, obj, e):
+        try:
+            if e.type() != QEvent.Wheel: return False
+            m, sm = self.mult(), self.smooth()
+            if m == 1 and not sm: return False
+            if e.modifiers() & (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier): return False
+            if not e.pixelDelta().isNull(): return False                     # 觸控板：系統本來就是順的
+            area = obj.parent() if obj is not None else None
+            if not isinstance(area, QAbstractScrollArea) or area.viewport() is not obj: return False
+            dy = e.angleDelta().y()
+            if not dy: return False
+            sb = area.verticalScrollBar()
+            if sb is None or sb.maximum() <= sb.minimum() or not sb.isEnabled(): return False
+            lines = max(1, QApplication.wheelScrollLines())
+            if isinstance(area, QAbstractItemView) and area.verticalScrollMode() == QAbstractItemView.ScrollPerItem:
+                d = -round(dy / 120 * lines * m) or (-1 if dy > 0 else 1); sb.setValue(sb.value() + d); return True
+            d = -dy / 120.0 * max(sb.singleStep(), 20) * lines * m
+            A = self.an.get(sb); cur = A['to'] if A else sb.value()
+            if (d < 0 and cur <= sb.minimum()) or (d > 0 and cur >= sb.maximum()): return False   # 到底了：讓外面那層捲
+            to = max(sb.minimum(), min(sb.maximum(), cur + d))
+            if not sm: sb.setValue(int(round(to))); return True
+            import time as _t
+            now = _t.monotonic()
+            if A: A.update(fr=float(sb.value()), to=to, t0=now, dur=0.22, io=False)      # 連續滾：中途接著加、只緩出
+            else: self.an[sb] = {'fr': float(sb.value()), 'to': to, 't0': now, 'dur': 0.30, 'io': True}
+            if not self.tm.isActive(): self.tm.start()
+            return True
+        except Exception: return False
+
+    def _tick(self):
+        import time as _t
+        now = _t.monotonic()
+        for sb, A in list(self.an.items()):
+            try:
+                t = min(1.0, (now - A['t0']) / A['dur'])
+                k = (2 * t * t if t < .5 else 1 - (-2 * t + 2) ** 2 / 2) if A['io'] else 1 - (1 - t) ** 3
+                sb.setValue(int(round(A['fr'] + (A['to'] - A['fr']) * k)))
+                if t >= 1: self.an.pop(sb, None)
+            except Exception: self.an.pop(sb, None)                             # 那個清單關掉了
+        if not self.an: self.tm.stop()
+
+
+def timed_box(parent, title, text, secs=10):
+    """V0.6.34 不擋畫面的通知（參考 TikLive V1.1.34）：「確定（N 秒後自動關閉）」倒數，也可以直接按."""
+    try:
+        mb = QMessageBox(parent); mb.setWindowTitle(title); mb.setText(text); mb.setIcon(QMessageBox.Information); mb.setModal(False)
+        mb.setAttribute(Qt.WA_DeleteOnClose, True); b = mb.addButton('確定', QMessageBox.AcceptRole); left = [int(secs)]
+        def tick():
+            left[0] -= 1
+            try:
+                if left[0] <= 0: mb.close(); return
+                b.setText(f'確定（{left[0]} 秒後自動關閉）')
+            except Exception: return
+            QTimer.singleShot(1000, tick)
+        b.setText(f'確定（{left[0]} 秒後自動關閉）'); mb.show(); QTimer.singleShot(1000, tick); return mb
+    except Exception: return None
+
+
+def wheel_install():
+    """裝到整個程式（熱更新時把舊的換掉）."""
+    app = QApplication.instance()
+    if app is None: return
+    old = getattr(app, '_vs_wheel', None)
+    if old is not None:
+        try: app.removeEventFilter(old)
+        except Exception: pass
+    W = WheelBoost(); app.installEventFilter(W); app._vs_wheel = W
+
+
 class Main(QMainWindow):
     def __init__(self, adopt=None):
         try: QApplication.instance().setStyleSheet(theme_qss(ENG.cfg.get('ui_theme') or 'dark', ENG.cfg.get('ui_zoom') or 100))   # V0.1.53 TikLive 樣式（熱更新也馬上換）
+        except Exception: pass
+        try: wheel_install()                                                     # V0.6.34 滾輪速度＋絲滑
         except Exception: pass
         super().__init__(); self.setWindowTitle(f'{APP_TITLE}  V{APP_VERSION}'); self.resize(1500, 920); self.quitting = False; self._handoff = False; self._upd_seen = set()
         self.icon0 = app_icon()
@@ -9096,8 +9192,8 @@ class Main(QMainWindow):
         notes = st.get('hot_notes') or []
         self.msg(f'⚡ 已熱更新：V{st.get("hot_from")} → V{APP_VERSION}（程式沒有關、背景工作沒有中斷）', 15000)
         if st.get('visible', True):
-            QTimer.singleShot(400, lambda: QMessageBox.information(self, '已熱更新', f'V{st.get("hot_from")} → V{APP_VERSION}\n\n' + '\n'.join('• ' + str(x) for x in notes[:12]) +
-                                                                   ('\n…' if len(notes) > 12 else '') + '\n\n程式沒有關，背景工作照常進行。'))
+            QTimer.singleShot(400, lambda: timed_box(self, '已熱更新', f'V{st.get("hot_from")} → V{APP_VERSION}\n\n' + '\n'.join('• ' + str(x) for x in notes[:12]) +
+                                                       ('\n…' if len(notes) > 12 else '') + '\n\n程式沒有關，背景工作照常進行。'))
 
     def handoff(self):
         """舊視窗要被新版取代：停計時器、收托盤、關浮窗；不碰引擎."""

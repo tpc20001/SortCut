@@ -1320,6 +1320,28 @@ async function tExplore(){const tb=$('#tb');if(!tb)return;
     b.onpointerdown=down;b.onpointerup=b.onpointercancel=b.onpointerleave=()=>clearTimeout(lp);b.oncontextmenu=e=>{if(e.target.closest('[data-exn]'))e.preventDefault()};
     b.onclick=e=>{if(lpd){lpd=false;return}const ff=e.target.closest('[data-exf]');if(ff)return openFile(+ff.dataset.exf);const hh=e.target.closest('[data-exh]');if(hh)return exConvMenu(hh.dataset.exh,hh.dataset.exhn);const m=e.target.closest('[data-exm]'),r=e.target.closest('[data-exd]');if(!r)return;if(m){const row=m.closest('[data-exn]');return exConvMenu(row.dataset.exd,row.dataset.exn)}EX.p=r.dataset.exd;exSave();tExplore()}};
   draw()}
+// V0.6.34 🖱 滾輪速度＋絲滑（電腦瀏覽器才有；參考 TikLive）：右下角 🖱 －×1＋ ∿，每個瀏覽器自己記
+(function(){if(!matchMedia('(pointer:fine)').matches)return;const WS=[0.5,0.75,1,1.5,2,2.5,3,4,5,6,8];let wm=1,sm=true;
+  try{wm=parseFloat(localStorage.getItem('vs_wheel'))||1;sm=localStorage.getItem('vs_wheel_smooth')!=='0'}catch(e){}
+  const box=document.createElement('div');box.id='whBox';box.style.cssText='position:fixed;right:8px;bottom:8px;z-index:60;display:flex;gap:2px;align-items:center;background:var(--panel,#1b2130);border:1px solid var(--vline,#333);border-radius:10px;padding:2px 4px;font-size:12px;opacity:.55';
+  box.innerHTML='<button class="pill" id="whS" title="滾輪絲滑（緩進緩出）開／關" style="padding:2px 7px">🖱</button><button class="pill" id="whM" title="滾輪捲慢一點" style="padding:2px 7px">－</button><span id="whV" style="min-width:30px;text-align:center"></span><button class="pill" id="whP" title="滾輪捲快一點" style="padding:2px 7px">＋</button>';
+  box.onmouseenter=()=>box.style.opacity='1';box.onmouseleave=()=>box.style.opacity='.55';
+  const show=()=>{box.querySelector('#whV').textContent='×'+wm;const b=box.querySelector('#whS');b.textContent=sm?'🖱∿':'🖱';b.style.opacity=sm?'1':'.6'};
+  const step=d=>{let i=WS.indexOf(wm);if(i<0)i=2;i=Math.max(0,Math.min(WS.length-1,i+d));wm=WS[i];try{localStorage.setItem('vs_wheel',String(wm))}catch(e){}show();toast('🖱 滾輪 ×'+wm+(wm===1?'（原本的速度）':''))};
+  const init=()=>{document.body.appendChild(box);box.querySelector('#whM').onclick=()=>step(-1);box.querySelector('#whP').onclick=()=>step(1);
+    box.querySelector('#whS').onclick=()=>{sm=!sm;try{localStorage.setItem('vs_wheel_smooth',sm?'1':'0')}catch(e){}show();toast(sm?'🖱 滾輪絲滑：開（緩進緩出）':'🖱 滾輪絲滑：關')};show()};
+  document.readyState==='loading'?addEventListener('DOMContentLoaded',init):init();
+  const canY=(el,dy)=>{const o=getComputedStyle(el).overflowY;if(!(o==='auto'||o==='scroll'||el===document.scrollingElement))return false;if(el.scrollHeight<=el.clientHeight+1)return false;return dy>0?el.scrollTop+el.clientHeight<el.scrollHeight-1:el.scrollTop>0};
+  const AN=new Map(),ioq=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2,oc=t=>1-Math.pow(1-t,3);
+  const glide=(el,d)=>{const mx=el.scrollHeight-el.clientHeight;let A=AN.get(el);const now=performance.now();
+    if(A&&now-A.t0<A.dur){A.from=el.scrollTop;A.to=Math.max(0,Math.min(mx,A.to+d));A.t0=now;A.dur=260;A.ease=oc}
+    else{A={from:el.scrollTop,to:Math.max(0,Math.min(mx,el.scrollTop+d)),t0:now,dur:340,ease:ioq,raf:0};AN.set(el,A)}
+    if(!A.raf){const tk=()=>{const B=AN.get(el);if(!B)return;const t=Math.min(1,(performance.now()-B.t0)/B.dur);el.scrollTop=B.from+(B.to-B.from)*B.ease(t);if(t<1)B.raf=requestAnimationFrame(tk);else{B.raf=0;AN.delete(el)}};A.raf=requestAnimationFrame(tk)}};
+  addEventListener('wheel',e=>{if((wm===1&&!sm)||e.defaultPrevented||e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;const t=e.target;if(t&&t.closest&&t.closest('select,input[type=range],textarea,video,audio'))return;
+    const k=e.deltaMode===1?40:e.deltaMode===2?600:1,dy=e.deltaY*k;if(!dy||Math.abs(e.deltaX)>Math.abs(e.deltaY))return;
+    for(let el=t&&t.nodeType===1?t:t&&t.parentElement;el;el=el.parentElement){if(el===document.documentElement){el=document.scrollingElement;if(!canY(el,dy))return}
+      if(canY(el,dy)){e.preventDefault();if(sm)glide(el,dy*wm);else el.scrollTop+=dy*wm;return}if(el===document.scrollingElement)return}},{passive:false});
+  ['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,()=>{AN.forEach(A=>{if(A.raf)cancelAnimationFrame(A.raf)});AN.clear()},{passive:true,capture:true}))})();
 async function tConv(){LS.set('cv',CV);
   $('#tb').innerHTML=`<div id="cvg"></div><div class="seg" id="cvtab" style="margin-bottom:8px;width:100%">${[['pick','➕ 選檔'],['run','⚙ 轉檔中'],['done','✔ 完成'],['fail','✖ 失敗']].map(([k,n])=>`<button data-k="${k}" style="flex:1"${CV.tab===k?' class="on"':''}>${n}</button>`).join('')}</div><div id="cvb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;
   $('#cvtab').onclick=e=>{const b=e.target.closest('button');if(!b)return;CV.tab=b.dataset.k;CVSEL.clear();tConv()};
