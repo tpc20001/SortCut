@@ -482,14 +482,16 @@ async function findPanel(){
   $('#freset',d).onclick=()=>{S.q='';S.sort='name';S.flt='all';S.sub=true;saveView();const q=$('#q');if(q)q.value='';close().then(()=>loadList(true))};
   d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))close()})}
 function fltName(k){if(k.startsWith('tag:'))return TAGS[k.slice(4)]+' 標籤';if(k.startsWith('person:'))return '👤 '+((S.people||[]).find(p=>'person:'+p.id===k)||{name:'人物'}).name;if(k.startsWith('ext:'))return '🚫 '+k.slice(5);if(k.startsWith('month:'))return '📅 '+k.slice(6);if(k==='bmk')return '🔖 有書籤';if(k==='still')return '😴 大多是靜止的';if(k==='uped')return '📤 已上傳';if(k==='notup')return '📤 S／A 還沒上傳';if(k==='bad')return '⚠ 讀不了／可能壞掉';if(k==='notpub')return '✅ 複製了、還沒發佈';if(k==='pub')return '✅ 已發佈';if(k==='novideo')return '🔇 只有聲音';return k}
-async function purgeTrash(){const r=await api(U('/api/lib',{a:'trash'}));if(!r.ok)return toast(r.message||'讀不到');   // V0.6.35 也看 X:\DELETE（轉檔前的原檔）
-  const fl=r.f_n?`\n（另外 F 級還有 ${r.f_n.toLocaleString()} 部・${fmtB(r.f_b)} 還在原位、沒移到待刪：要清的話先「多選 F → 移到待刪」或用歸檔把 F 歸到待刪）`:'';
-  if(!r.n&&!r.del_n)return alert('待刪和 DELETE 都是空的'+(r.skip?`（${r.skip} 個是初剪或正在用，保留）`:'')+fl);
-  const go=async(w,n,b,what)=>{if(!confirm(`永久刪除 ${what}：${n.toLocaleString()} 個檔（${fmtB(b)}）？\n\n・不經過資源回收筒，空間馬上回來，刪了救不回來\n・待刪的：預覽圖、人臉資料、清單那一筆一起清掉；初剪的 100% 保留\n・DELETE 的：轉好的 MP4 留著，只刪轉檔前的原檔（轉完反而變大的原檔不刪）`))return;
-    if(n>20&&!confirm(`再確認一次：永久刪除 ${n.toLocaleString()} 個檔、${fmtB(b)}？`))return;const x=await api('/api/lib',{a:'trash_purge',del:w});toast(x.message||'',8000);setTimeout(()=>loadList(true),3000)};
+async function purgeTrash(){const fd=S.folder||'';const r=await api(U('/api/lib',{a:'trash',folder:fd}));if(!r.ok)return toast(r.message||'讀不到');   // V0.6.35 也看 X:\DELETE（轉檔前的原檔）
+  const fl='';const where=fd||'整個影片庫';
+  if(!r.n&&!r.del_n&&!r.f_n)return alert('待刪、DELETE、F 級都是空的'+(r.skip?`（${r.skip} 個是初剪或正在用，保留）`:''));
+  const go=async(w,n,b,what,f='')=>{if(!confirm(`永久刪除 ${what}：${n.toLocaleString()} 個檔（${fmtB(b)}）？\n\n・不經過資源回收筒，空間馬上回來，刪了救不回來\n・待刪、F 級：預覽圖、人臉資料、清單那一筆一起清掉；剪好的片段（初剪）100% 保留\n・DELETE 的：轉好的 MP4 留著，只刪轉檔前的原檔（轉完反而變大的原檔不刪）`))return;
+    if(n>20&&!confirm(`再確認一次：永久刪除 ${n.toLocaleString()} 個檔、${fmtB(b)}？`))return;const x=await api('/api/lib',{a:'trash_purge',del:w,f,folder:fd});toast(x.message||'',8000);setTimeout(()=>loadList(true),3000)};
   const L=[];if(r.trash_n)L.push([`🗑 只清 VideoSIFT\\待刪：${r.trash_n.toLocaleString()} 個・${fmtB(r.trash_b)}`,()=>go('',r.trash_n,r.trash_b,'VideoSIFT\\待刪')]);
   if(r.del_n)L.push([`🔁 只清 DELETE（轉檔前的原檔）：${r.del_n.toLocaleString()} 個・${fmtB(r.del_b)}`,()=>go('only',r.del_n,r.del_b,'X:\\DELETE 裡轉檔前的原檔')]);
-  if(r.trash_n&&r.del_n)L.push([`🔥 兩個都清：${(r.trash_n+r.del_n).toLocaleString()} 個・${fmtB(r.trash_b+r.del_b)}`,()=>go('with',r.trash_n+r.del_n,r.trash_b+r.del_b,'待刪＋DELETE')]);
+  if(r.trash_n&&r.del_n)L.push([`🔥 待刪＋DELETE：${(r.trash_n+r.del_n).toLocaleString()} 個・${fmtB(r.trash_b+r.del_b)}`,()=>go('with',r.trash_n+r.del_n,r.trash_b+r.del_b,'待刪＋DELETE')]);
+  if(r.f_n)L.push([`🅵 F 級直接永久刪除（${where}）：${r.f_n.toLocaleString()} 部・${fmtB(r.f_b)}`,()=>go('',r.f_n,r.f_b,`F 級（${where}，不用先移到待刪）`,'only')]);   // V0.6.36
+  if(r.f_n&&(r.trash_n||r.del_n)){const n=r.trash_n+r.del_n+r.f_n,b=r.trash_b+r.del_b+r.f_b;L.push([`🔥 全部一起（待刪＋DELETE＋F 級）：${n.toLocaleString()} 個・${fmtB(b)}`,()=>go('with',n,b,'待刪＋DELETE＋F 級','with')])}
   if(fl)toast(fl.trim(),9000);menu('🔥 清空待刪'+(r.del_skip?`（DELETE 有 ${r.del_skip} 個轉完變大的原檔保留）`:''),L)}
 const DURS=[['','全部時長'],['s','< 1 分'],['m','1–10 分'],['l','10–60 分'],['x','> 1 小時'],['z','沒時長']];
 function durChips(){const el=$('#durc');if(!el)return;const on=S.state&&S.state.lab&&S.state.lab.dur_chips;if(!on){el.innerHTML='';el.style.display='none';return}el.style.display='';

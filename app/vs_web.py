@@ -1062,7 +1062,7 @@ class WebServer:
         if req.method != 'POST':
             a = req.q('a') or 'info'
             if a == 'info': return jresp(self._lib_info())
-            if a == 'trash': r = E.trash_purge(dry=True); r.pop('dirs', None); return jresp(r)
+            if a == 'trash': r = E.trash_purge(dry=True, folder=req.q('folder') or ''); r.pop('dirs', None); return jresp(r)
             if a == 'iso': r = E.iso_list(); r['ok'] = True; return jresp(r)                                       # V0.2.24 🗄 讀不到的（隔離中）                 # V0.2.01 清空待刪：先看有幾個
             if a == 'dirs':                                                     # 手機上「＋ 加硬碟」：瀏覽電腦上的資料夾
                 p = req.q('path') or ''
@@ -1129,7 +1129,8 @@ class WebServer:
             n = E.archive_many(ids, kind); self._pc_reload(); return jresp({'ok': n > 0, 'message': f'已排入歸檔 {n:,} 部（後台看進度；📒 操作紀錄有每一筆，可以搬回）'})
         if a == 'trash_purge':
             w_ = str(d.get('del') or '')                                         # V0.6.35 ''＝只有待刪、with＝連 DELETE、only＝只有 DELETE
-            r = E.trash_purge(dry=False, incl_del=(w_ == 'with'), only_del=(w_ == 'only')); self._pc_reload(); return jresp(r)
+            f_ = str(d.get('f') or '')                                           # V0.6.36 ''＝不含 F、with＝連 F 級一起、only＝只刪 F 級
+            r = E.trash_purge(dry=False, incl_del=(w_ == 'with'), only_del=(w_ == 'only'), incl_f=(f_ == 'with'), only_f=(f_ == 'only'), folder=s('folder')); self._pc_reload(); return jresp(r)
         if a == 'restore_db':
             r = E.request_restore(s('name'))
             if r.get('ok'): r['message'] = f'已排定：下次打開程式時用這份備份還原（{r.get("n", 0):,} 部影片；現在的資料庫會改名留著）'

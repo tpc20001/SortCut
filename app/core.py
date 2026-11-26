@@ -4179,7 +4179,23 @@ class Engine:
                     L.append({'path': p, 'size': sz, 'fid': int(fid) if fid is not None else None, 'src': src or ''})
         return L, skip
 
-    def trash_purge(self, dry=True, incl_del=False, only_del=False):
+    def f_scan(self, folder=''):
+        """V0.6.36 F 級、還在原位的（這個範圍，含子資料夾）：直接永久刪除用。初剪出來的檔、正在轉檔／初剪的不刪."""
+        ids = self.grade_ids('F', folder)
+        if not ids: return [], []
+        cut_keys = {path_key(c['out']) for c in self.db.q("SELECT out FROM cuts WHERE length(out)>0")}
+        busy = set(int(x) for x in self.cv_active) | {int(j['fid']) for j in list(self.cut_q)} | ({int(self.cut_cur['fid'])} if self.cut_cur else set())
+        L = []; skip = []
+        for i in range(0, len(ids), 500):
+            for r in self.db.q(f"SELECT id, path, size FROM files WHERE id IN ({','.join(str(int(x)) for x in ids[i:i + 500])})"):
+                x = {'path': r['path'], 'size': int(r['size'] or 0), 'fid': int(r['id']), 'src': r['path'], 'kind': 'F'}
+                if self._is_cut_file(r['path'], cut_keys): skip.append(dict(x, why='初剪的檔，一律保留')); continue
+                if int(r['id']) in busy: skip.append(dict(x, why='正在轉檔／初剪')); continue
+                if not os.path.isfile(r['path']): continue
+                L.append(x)
+        return L, skip
+
+    def trash_purge(self, dry=True, incl_del=False, only_del=False, incl_f=False, only_f=False, folder=''):
         """dry＝只算有幾個、多大；不然在背景永久刪除（硬碟空間馬上回來，不經過資源回收筒）.
         V0.6.35 incl_del＝連 X:\\DELETE（轉檔前的原檔）一起；only_del＝只清 DELETE."""
         L, skip = self.trash_scan()
@@ -4187,11 +4203,14 @@ class Engine:
         except Exception: DL, dskip = [], []; self.log.err('清空待刪：讀 DELETE')
         info = {'del_n': len(DL), 'del_b': sum(x['size'] for x in DL), 'del_skip': len(dskip), 'del_skip_b': sum(x['size'] for x in dskip),
                 'del_dirs': [str(d) for d in self.del_dirs()], 'trash_n': len(L), 'trash_b': sum(x['size'] for x in L)}
-        try:
-            fr = self.db.one("SELECT COUNT(*), TOTAL(size) FROM files WHERE missing=0 AND grade='F'"); info['f_n'] = int(fr[0] or 0); info['f_b'] = int(fr[1] or 0)   # F 級還沒移到待刪的
-        except Exception: info['f_n'] = info['f_b'] = 0
-        if only_del: L, skip = DL, dskip
-        elif incl_del: L = L + DL; skip = skip + dskip
+        try: FL, fskip = self.f_scan(folder)
+        except Exception: FL, fskip = [], []; self.log.err('清空待刪：讀 F 級')
+        info.update(f_n=len(FL), f_b=sum(x['size'] for x in FL), f_skip=len(fskip), f_folder=folder or '')
+        if only_f: L, skip = FL, fskip
+        elif only_del: L, skip = DL, dskip
+        else:
+            if incl_del: L = L + DL; skip = skip + dskip
+            if incl_f: L = L + FL; skip = skip + fskip
         by = {}
         for x in L:
             k = Path(x['path']).anchor.upper(); n_, b_ = by.get(k, (0, 0)); by[k] = (n_ + 1, b_ + x['size'])
@@ -4215,7 +4234,7 @@ class Engine:
                             try: self.db.x("UPDATE files SET cv_del='' WHERE id=?", (int(x['del_fid']),))
                             except Exception: pass
                         continue
-                    self.oplog('purge', src=x['path'], fid=x['fid'], size=x['size'], detail='清空待刪：永久刪除' + (f'（原本在 {x["src"]}）' if x['src'] else ''))
+                    self.oplog('purge', src=x['path'], fid=x['fid'], size=x['size'], detail=('清空待刪：F 級直接永久刪除' if x.get('kind') == 'F' else '清空待刪：永久刪除') + (f'（原本在 {x["src"]}）' if x['src'] and x.get('kind') != 'F' else ''))
                     try: self.db.x("UPDATE oplog SET undone=-1 WHERE kind='trash' AND undone=0 AND dst=?", (x['path'],))     # 已經刪掉了：「↩ 復原上一次移到待刪」不要再找它
                     except Exception: pass
                     if x['fid'] is not None: fids.append(x['fid'])

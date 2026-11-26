@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.35'
+APP_VERSION = '0.6.36'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -2552,22 +2552,31 @@ class BrowsePage(QWidget):
 
     def purge_trash(self):
         def ask(r):                                                              # V0.6.35 也看 X:\DELETE（轉檔前的原檔），可以選清哪個
-            fl = (f'\n\n（另外 F 級還有 {r.get("f_n", 0):,} 部・{fmt_b(r.get("f_b", 0))} 還在原位、沒移到待刪：要清的話先把 F 歸到待刪）' if r.get('f_n') else '')
+            fn, fb_ = int(r.get('f_n') or 0), int(r.get('f_b') or 0); where = self.folder or '整個影片庫'
+            fl = (f'\n🅵 F 級（{where}，還在原位）：{fn:,} 部・{fmt_b(fb_)}（剪好的片段 100% 保留）' if fn else '')
             tn, tb, dn, db_ = int(r.get('trash_n') or 0), int(r.get('trash_b') or 0), int(r.get('del_n') or 0), int(r.get('del_b') or 0)
-            if not tn and not dn: QMessageBox.information(self, '🔥 清空待刪', '待刪和 DELETE 都是空的' + (f'（{r["skip"]} 個是初剪或正在用，保留）' if r.get('skip') else '') + fl); return
+            if not tn and not dn and not fn: QMessageBox.information(self, '🔥 清空待刪', '待刪和 DELETE 都是空的' + (f'（{r["skip"]} 個是初剪或正在用，保留）' if r.get('skip') else '') + fl); return
             mb = QMessageBox(self); mb.setWindowTitle('🔥 清空待刪'); mb.setIcon(QMessageBox.Warning)
             mb.setText(f'要永久刪除哪些？（不經過資源回收筒，刪了救不回來）\n\n'
                        f'🗑 VideoSIFT\\待刪：{tn:,} 個・{fmt_b(tb)}（預覽圖、人臉、清單那一筆一起清；初剪的 100% 保留）\n'
                        f'🔁 X:\\DELETE（轉檔前的原檔）：{dn:,} 個・{fmt_b(db_)}（轉好的 MP4 留著）' + (f'；轉完變大的 {r.get("del_skip", 0)} 個原檔保留' if r.get('del_skip') else '') + fl)
             bt = mb.addButton(f'只清待刪（{fmt_b(tb)}）', QMessageBox.AcceptRole) if tn else None
             bd = mb.addButton(f'只清 DELETE（{fmt_b(db_)}）', QMessageBox.AcceptRole) if dn else None
-            bb = mb.addButton(f'兩個都清（{fmt_b(tb + db_)}）', QMessageBox.AcceptRole) if tn and dn else None
+            bb = mb.addButton(f'待刪＋DELETE（{fmt_b(tb + db_)}）', QMessageBox.AcceptRole) if tn and dn else None
+            bf = mb.addButton(f'🅵 F 級直接刪（{fmt_b(fb_)}）', QMessageBox.AcceptRole) if fn else None                      # V0.6.36 不用先移到待刪
+            ba = mb.addButton(f'全部一起（{fmt_b(tb + db_ + fb_)}）', QMessageBox.AcceptRole) if fn and (tn or dn) else None
             mb.addButton('取消', QMessageBox.RejectRole); mb.exec(); c = mb.clickedButton()
-            if c is None or c not in [x for x in (bt, bd, bb) if x is not None]: return
-            w = 'only' if c is bd else 'with' if c is bb else ''; n = dn if w == 'only' else tn + dn if w == 'with' else tn; b_ = db_ if w == 'only' else tb + db_ if w == 'with' else tb
+            if c is None or c not in [x for x in (bt, bd, bb, bf, ba) if x is not None]: return
+            if c is bf: w, f_, n, b_ = '', 'only', fn, fb_
+            elif c is ba: w, f_, n, b_ = 'with', 'with', tn + dn + fn, tb + db_ + fb_
+            else:
+                f_ = ''; w = 'only' if c is bd else 'with' if c is bb else ''; n = dn if w == 'only' else tn + dn if w == 'with' else tn; b_ = db_ if w == 'only' else tb + db_ if w == 'with' else tb
             if n > 20 and QMessageBox.question(self, '🔥 清空待刪', f'再確認一次：永久刪除 {n:,} 個檔、{fmt_b(b_)}？') != QMessageBox.Yes: return
-            bg(lambda: ENG.trash_purge(dry=False, incl_del=(w == 'with'), only_del=(w == 'only')), lambda x: (self.win.msg('🔥 ' + x.get('message', ''), 12000), QTimer.singleShot(3000, self.load_list)))
-        bg(lambda: ENG.trash_purge(dry=True), ask)
+            fd = self.folder or ''
+            bg(lambda: ENG.trash_purge(dry=False, incl_del=(w == 'with'), only_del=(w == 'only'), incl_f=(f_ == 'with'), only_f=(f_ == 'only'), folder=fd),
+               lambda x: (self.win.msg('🔥 ' + x.get('message', ''), 12000), QTimer.singleShot(3000, self.load_list)))
+        fd0 = self.folder or ''
+        bg(lambda: ENG.trash_purge(dry=True, folder=fd0), ask)
 
     def archive_grade(self, g, folder=None):
         fd = self.folder if folder is None else folder
