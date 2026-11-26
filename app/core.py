@@ -5027,8 +5027,29 @@ class Engine:
                 spgb = float(self.cfg.get('cv_fin_spgb') or 20.0)                # 收尾（把索引移到檔頭）每 GB 要幾秒：照實際量到的慢慢修正
                 W = 0.9 if fs else 1.0                                          # V0.1.93 進度條照實際：轉檔 0～90%、收尾 90～100%（以前轉完就停在 99.8% 不動）
 
+                ADV = {'us': -1, 'sz': -1, 't': time.time()}                    # V0.6.33 ⏭ 卡住／慢太多 → 自動跳過
+
+                def autoskip(p, el, ep):
+                    if self.cfg.get('cv_autoskip') is False or J.get('autoskip') or FIN['t']: return
+                    now = time.time()
+                    try: sz = outp.stat().st_size
+                    except Exception: sz = 0
+                    if p.out_us > ADV['us'] or sz > ADV['sz'] + 256 * 1024: ADV.update(us=max(ADV['us'], p.out_us), sz=max(ADV['sz'], sz), t=now)
+                    stuck = float(self.cfg.get('cv_stuck_min') or 10) * 60
+                    if now - ADV['t'] > stuck:
+                        J['autoskip'] = f'{stuck / 60:.0f} 分鐘沒有前進（停在 {ep * 100:.1f}%）'
+                    else:
+                        J['_rt'] = (p.out_us / 1e6) / el if el > 60 else None               # 這部的速度（影片秒／實際秒）
+                        oth = sorted(x['_rt'] for x in list(self.cv_active.values()) if x is not J and x.get('_rt'))
+                        if el > 15 * 60 and oth and J['_rt'] is not None and dur > 0:
+                            med = oth[len(oth) // 2]; left_ = (dur - p.out_us / 1e6) / max(J['_rt'], 1e-3)
+                            if J['_rt'] < med * float(self.cfg.get('cv_slow_x') or 0.15) and left_ > 2 * 3600:
+                                J['autoskip'] = f'比其他正在轉的慢太多（{J["_rt"]:.2f}x，其他約 {med:.1f}x，照這樣還要 {fmt_t(left_)}）'
+                    if J.get('autoskip'): self.log.w(f'⏭ 自動跳過：{src.name}：{J["autoskip"]} → 停掉、放到「失敗」（可以再按重試）'); p.kill()
+
                 def tick(p):
                     el = time.time() - t0; ep = min(1.0, p.out_us / 1e6 / dur) if dur > 0 else 0.0
+                    autoskip(p, el, ep)
                     if fs and (FIN['t'] or (ep >= 0.97 and time.time() - p.t_last > 4)):          # 轉完了、FFmpeg 不再回報進度＝在收尾
                         if not FIN['t']:
                             FIN['t'] = time.time(); FIN['r0'] = proc_io(p.p.pid); J['phase'] = 'finish'      # 顯示卡已經空出來：下一部可以先開始
@@ -5051,6 +5072,7 @@ class Engine:
                     v_ = (time.time() - FIN['t']) / (FIN['sz'] / 1e9)
                     self.cfg.set('cv_fin_spgb', round(spgb * 0.6 + v_ * 0.4, 2))
                     self.log.w(f'轉檔收尾（把索引移到檔頭）：{fmt_b(FIN["sz"])} 花 {time.time() - FIN["t"]:.0f} 秒（每 GB {v_:.0f} 秒）')
+                if J.get('autoskip'): raise RuntimeError(f'⏭ 自動跳過：{J["autoskip"]}')
                 if rc == -2: raise InterruptedError('取消')
                 return rc, (P.errtext() or f'ffmpeg {rc}')
             aargs = ['-c:a', 'copy'] if acopy else ['-c:a', 'aac', '-b:a', '192k']
