@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.36'
+APP_VERSION = '0.6.37'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -8685,12 +8685,12 @@ class NavList(QListWidget):
                                        (26, 'HotZone 圖片分類', '🎨'), (27, '生圖比較', '🖼')]),
               ('HotZone 檔案與硬碟', '#43d9ff', [(11, 'HotZone 總管', '🔥'), (20, 'HotZone 總覽', '📋'), (21, 'HotZone 檔案總管', '🗂'), (22, '搜尋', '🔍'), (23, '空間分析', '📊'),
                                           (28, '影片工具', '🎬'), (29, '傳輸佇列', '⇅'), (30, '資料夾同步', '⇄'), (31, '熱處理', '♨'), (32, '磁碟', '💽')]),
-              ('電腦與背景', '#45d483', [(2, '後台狀態', '🖥'), (42, '整理的後台', '⚙'), (41, '資料分析', '📈'), (58, '備份檢查', '💾'), (15, '搬硬碟', '🚚'), (16, '新功能工具箱', '🧰'),
+              ('電腦與背景', '#45d483', [(2, '後台狀態', '🖥'), (42, '整理的後台', '⚙'), (41, '資料分析', '📈'), (58, '備份檢查', '💾'), (73, '多步搬硬碟（D⇄H）', '🚚'), (15, '搬硬碟', '🚚'), (16, '新功能工具箱', '🧰'),
                                     (7, '🧪 實驗工作區', '🧪'), (61, '整理的操作紀錄', '🧾')]),
               ('設定與說明', '#9aa5b3', [(3, '設定：SortCut', '⚙'), (62, '設定：整理（FileCompare）', '🔧'), (33, '設定：HotZone', '🔥'), (5, '版本與更新', '⟳'),
                                      (8, '使用說明', '📖'), (64, '說明：整理', '📖'), (35, '說明：HotZone', '❓'), (4, 'LOG', '📜'), (63, 'LOG：整理', '📜'), (34, 'LOG：HotZone', '📜')])]
     NAMES = {pg: (ic, nm) for _g, _c, L in GROUPS for pg, nm, ic in L}
-    ARCHIVED = {73: ('🗄', 'R 碟清空搬移（封存）')}                               # V0.6.06 封存：不在選單裡，Ctrl+Shift+R 打開
+    ARCHIVED = {}                                                                # V0.6.37 放回選單（電腦與背景 → 🚚 多步搬硬碟）；Ctrl+Shift+R 照樣能開
 
     def __init__(self, on_page):
         super().__init__(); self.on_page = on_page; self._page = -1; self._rows = {}; self._items = {}; self._groups = []
@@ -10050,11 +10050,10 @@ class Main(QMainWindow):
         """V0.6.06 🗄 封存的功能（Ctrl+Shift+R）：R 碟清空搬移不在選單裡，避免誤按."""
         try:
             if self.outer.currentIndex() == 0: self.outer.setCurrentIndex(1)
-            self._page(73); self.msg('🗄 封存的功能：R 碟清空搬移（不在選單裡；回選單點左邊任何一項）', 6000)
+            self._page(73); self.msg('🚚 多步搬硬碟（也在左邊「電腦與背景」裡）', 4000)
         except Exception: ENG.log.err('🗄 打開封存的功能')
 
     def enter(self, page):
-        if int(page) == 73: page = 0                                             # 封存的頁不從封面「上次停在」進去
         self.outer.setCurrentIndex(1); was_ = self.nav.currentRow(); self.nav.setCurrentRow(int(page))
         if was_ == int(page): self._page(int(page))
         for d in getattr(self, '_hidden_dlg', []):
