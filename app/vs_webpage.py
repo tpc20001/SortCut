@@ -482,10 +482,15 @@ async function findPanel(){
   $('#freset',d).onclick=()=>{S.q='';S.sort='name';S.flt='all';S.sub=true;saveView();const q=$('#q');if(q)q.value='';close().then(()=>loadList(true))};
   d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))close()})}
 function fltName(k){if(k.startsWith('tag:'))return TAGS[k.slice(4)]+' 標籤';if(k.startsWith('person:'))return '👤 '+((S.people||[]).find(p=>'person:'+p.id===k)||{name:'人物'}).name;if(k.startsWith('ext:'))return '🚫 '+k.slice(5);if(k.startsWith('month:'))return '📅 '+k.slice(6);if(k==='bmk')return '🔖 有書籤';if(k==='still')return '😴 大多是靜止的';if(k==='uped')return '📤 已上傳';if(k==='notup')return '📤 S／A 還沒上傳';if(k==='bad')return '⚠ 讀不了／可能壞掉';if(k==='notpub')return '✅ 複製了、還沒發佈';if(k==='pub')return '✅ 已發佈';if(k==='novideo')return '🔇 只有聲音';return k}
-async function purgeTrash(){const r=await api(U('/api/lib',{a:'trash'}));if(!r.ok)return toast(r.message||'讀不到');if(!r.n)return toast('待刪資料夾是空的'+(r.skip?`（${r.skip} 個是初剪或正在用，保留）`:''));
-  const by=Object.entries(r.by||{}).map(([k,v])=>`　${k} ${v[0]} 個・${fmtB(v[1])}`).join('\n');
-  if(!confirm(`永久刪除各硬碟 VideoSIFT\\待刪 裡的 ${r.n.toLocaleString()} 個檔（${fmtB(r.bytes)}）？\n${by}\n\n・不經過資源回收筒，空間馬上回來，刪了救不回來\n・預覽圖、人臉資料、清單裡那一筆一起清掉\n・初剪的檔 100% 保留${r.skip_cut?`（這次有 ${r.skip_cut} 個初剪的不刪）`:''}`))return;
-  if(r.n>20&&!confirm(`再確認一次：永久刪除 ${r.n.toLocaleString()} 個檔、${fmtB(r.bytes)}？`))return;const x=await api('/api/lib',{a:'trash_purge'});toast(x.message||'',8000);setTimeout(()=>loadList(true),3000)}
+async function purgeTrash(){const r=await api(U('/api/lib',{a:'trash'}));if(!r.ok)return toast(r.message||'讀不到');   // V0.6.35 也看 X:\DELETE（轉檔前的原檔）
+  const fl=r.f_n?`\n（另外 F 級還有 ${r.f_n.toLocaleString()} 部・${fmtB(r.f_b)} 還在原位、沒移到待刪：要清的話先「多選 F → 移到待刪」或用歸檔把 F 歸到待刪）`:'';
+  if(!r.n&&!r.del_n)return alert('待刪和 DELETE 都是空的'+(r.skip?`（${r.skip} 個是初剪或正在用，保留）`:'')+fl);
+  const go=async(w,n,b,what)=>{if(!confirm(`永久刪除 ${what}：${n.toLocaleString()} 個檔（${fmtB(b)}）？\n\n・不經過資源回收筒，空間馬上回來，刪了救不回來\n・待刪的：預覽圖、人臉資料、清單那一筆一起清掉；初剪的 100% 保留\n・DELETE 的：轉好的 MP4 留著，只刪轉檔前的原檔（轉完反而變大的原檔不刪）`))return;
+    if(n>20&&!confirm(`再確認一次：永久刪除 ${n.toLocaleString()} 個檔、${fmtB(b)}？`))return;const x=await api('/api/lib',{a:'trash_purge',del:w});toast(x.message||'',8000);setTimeout(()=>loadList(true),3000)};
+  const L=[];if(r.trash_n)L.push([`🗑 只清 VideoSIFT\\待刪：${r.trash_n.toLocaleString()} 個・${fmtB(r.trash_b)}`,()=>go('',r.trash_n,r.trash_b,'VideoSIFT\\待刪')]);
+  if(r.del_n)L.push([`🔁 只清 DELETE（轉檔前的原檔）：${r.del_n.toLocaleString()} 個・${fmtB(r.del_b)}`,()=>go('only',r.del_n,r.del_b,'X:\\DELETE 裡轉檔前的原檔')]);
+  if(r.trash_n&&r.del_n)L.push([`🔥 兩個都清：${(r.trash_n+r.del_n).toLocaleString()} 個・${fmtB(r.trash_b+r.del_b)}`,()=>go('with',r.trash_n+r.del_n,r.trash_b+r.del_b,'待刪＋DELETE')]);
+  if(fl)toast(fl.trim(),9000);menu('🔥 清空待刪'+(r.del_skip?`（DELETE 有 ${r.del_skip} 個轉完變大的原檔保留）`:''),L)}
 const DURS=[['','全部時長'],['s','< 1 分'],['m','1–10 分'],['l','10–60 分'],['x','> 1 小時'],['z','沒時長']];
 function durChips(){const el=$('#durc');if(!el)return;const on=S.state&&S.state.lab&&S.state.lab.dur_chips;if(!on){el.innerHTML='';el.style.display='none';return}el.style.display='';
   el.innerHTML=DURS.map(([k,n])=>`<button class="pill ${(S.dur||'')===k?'on':''}" data-d="${k}">⏱ ${n}</button>`).join('');
@@ -1024,6 +1029,30 @@ function rsDrv(j,P){   // V0.5.96 💽 R／V／U 三顆硬碟：工作管理員�
       <div class="rsDl"><span>傳輸速率</span><em>${mb(mx)}</em></div>
       <svg viewBox="0 0 ${W} ${H2}" preserveAspectRatio="none" class="rsSv">${grid(H2)}${rd.length>1?`<polyline points="${line(rd,H2,mx)}" fill="none" stroke="${c}" stroke-width="1.4" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity=".85"/><polyline points="${line(wr,H2,mx)}" fill="none" stroke="${c}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>`:''}</svg>
       <div class="rsDf"><span><i class="dash"></i>讀 <b>${mb(D.rd)}</b></span><span><i></i>寫 <b>${mb(D.wr)}</b></span></div></div>`}).join('')}</div>`}
+// V0.6.35 📋 多步搬移（例：D 選的 → G、D 剩下 → H、H 原本 → D、對調代號）
+const MQS={X:'D',Y:'H',Z:'G',only:new Set()};
+function mqPanel(j,D){const Q=j.mq||{},M=j.mqs||{},FZ=j.freeze||{},st=Q.state||'';const opt=v=>D.map(d=>`<option value="${d.X}"${d.X===v?' selected':''}>${d.X}:${d.label?' '+esc(d.label):''}　${fmtB(d.used)}／${fmtB(d.total)}</option>`).join('');
+  let h=`<div class="si rsCardB" style="border:2px solid #2f9bff"><b style="font-size:16px">📋 多步搬移（照順序一步一步搬，空間不夠先停）</b>`;
+  if(FZ.on)h+=`<div class="rsStop wait">🧊 <b>${FZ.letters.map(x=>x+':').join(' ')}</b> 冷凍中：SortCut、整理、H265 這幾顆只能看、不能改（搬完或按暫停就解凍）${FZ.blocked?`・擋下 ${FZ.blocked} 次`:''}</div>`;
+  if(j.waiting||j.pmsg)h+=`<div class="rsStop wait">⏳ ${esc(j.pmsg||'等轉檔／H265 停好…')}</div>`;
+  if(Q.notice)h+=`<div class="rsStop ok">${esc(Q.notice)} <button class="pill" data-mq="mq_notice_ok">知道了</button></div>`;
+  if(!st||st==='bad'||st==='done'){
+    h+=`<div class="rsRow"><label>A（要先清空、最後變成另一顆的）</label><select id="mqX">${opt(MQS.X)}</select></div><div class="rsRow"><label>B（A 剩下的搬來這、原本的搬去 A）</label><select id="mqY">${opt(MQS.Y)}</select></div><div class="rsRow"><label>C（A 裡選的資料夾先搬來這）</label><select id="mqZ">${opt(MQS.Z)}</select></div>
+     <small class="mu">① A 選的資料夾 → C　② A 剩下的 → B　③ B 原本的 → A　④ 到磁碟管理對調 A／B 代號（SortCut 用序號認得，紀錄都在）</small>
+     <div><button class="pill" data-mq="mq_scan">🔍 讀 ${MQS.X}: 的資料夾大小</button></div>${M.msg?`<small class="mu">${esc(M.msg)}</small>`:''}`;
+    if(M.X===MQS.X&&(M.tops||[]).length){const sel=[...MQS.only];const sb=(M.tops||[]).reduce((a,t)=>a+(MQS.only.has(t.rel)?t.b:0)+(t.kids||[]).reduce((x,k)=>x+(MQS.only.has(k.rel)&&!MQS.only.has(t.rel)?k.b:0),0),0);
+      h+=`<div><b>① 勾 ${MQS.X}: 上要先搬到 ${MQS.Z}: 的資料夾</b>（已勾 ${sel.length} 個・約 ${fmtB(sb)}）</div>`+M.tops.filter(t=>t.rel!=='（根目錄的檔）').map(t=>`<details><summary><label><input type="checkbox" data-mqo="${esc(t.rel)}"${MQS.only.has(t.rel)?' checked':''}> 📁 ${esc(t.rel)}　<b>${fmtB(t.b)}</b>・${t.n.toLocaleString()} 個</label></summary>${(t.kids||[]).map(k=>`<div style="margin-left:22px"><label><input type="checkbox" data-mqo="${esc(k.rel)}"${MQS.only.has(k.rel)||MQS.only.has(t.rel)?' checked':''}${MQS.only.has(t.rel)?' disabled':''}> ${esc(k.rel)}　${fmtB(k.b)}</label></div>`).join('')}</details>`).join('')+
+       `<button class="rsGo" data-mq="mq_create">✅ 檢查空間、記下 ${MQS.Y}: 原本的檔</button>`}}
+  if(Q.X){const s=Q.s||[0,0,0],A=Q.after||{};const nm=['① '+Q.X+': 選的 → '+Q.Z+':','② '+Q.X+': 剩下 → '+Q.Y+':','③ '+Q.Y+': 原本的 → '+Q.X+':','④ 對調代號'];
+    h+=`<div style="margin-top:6px">${(Q.steps||[]).map((x,i)=>{const dn=(Q.done||[]).find(d=>d.i===i);const cur=i===(Q.i||0)&&st==='run';return `<div class="rsU">${dn?'✔':cur?'▶':i<(Q.i||0)?'✔':'○'} <b>${esc(x.title)}</b>${i<3?`　${fmtB(s[i])}`:''}${dn?`　<small>搬好 ${dn.n.toLocaleString()} 個${dn.fail?'・沒搬成 '+dn.fail:''}</small>`:''}</div>`}).join('')}</div>
+      <small class="mu">搬完剩：${Q.Z}: ${fmtB(A[Q.Z])}・${Q.Y}: ${fmtB(A[Q.Y])}・${Q.X}: 放完還空 ${fmtB(A[Q.X])}　｜快照 ${(Q.n_snap||0).toLocaleString()} 個檔${Q.collide_n?`・⚠ ${Q.collide_n} 個同路徑同名（搬到 ${Q.Y}: 時會自動加 (2)）`:''}</small>`;
+    if((Q.problems||[]).length)h+=`<div class="rsStop" style="color:#ff6b6b">✖ ${Q.problems.map(esc).join('<br>✖ ')}</div>`;
+    if(Q.msg)h+=`<div class="rsStop ${st==='swap'||st==='done'?'ok':'wait'}">${esc(Q.msg)}</div>`;
+    if(st==='ready'||st==='stopped')h+=`<button class="rsGo" data-mq="mq_go">${st==='ready'?'🚚 開始（先停好轉檔／H265，再照順序搬）':'▶ 繼續'}</button>`;
+    if(st==='run')h+=`<button class="pill" data-mq="mq_pause" style="width:100%">⏸ 暫停（手上的做完再停，會解凍）</button>`;
+    if(st==='swap')h+=`<button class="rsGo" data-mq="mq_swapped">✔ 代號換好了</button>`;
+    if(st!=='run')h+=`<button class="pill" data-mq="mq_cancel" style="width:100%;margin-top:6px">✖ 取消這個計畫（搬好的不會變回去）</button>`}
+  return h+'</div>'}
 async function tRsplit(){const tb=$('#tb');let arm=0,sel=null,lastJ=null;   // V0.5.85 🚚 R 碟清空搬移（V0.5.87 速度拉桿、🧠 智能、每個檔的進度）
   const dopt=(D,v,ex)=>D.filter(d=>!ex.includes(d.X)).map(d=>`<option value="${d.X}"${d.X===v?' selected':''}>${d.X}:${d.label?' '+esc(d.label):''}　已用 ${fmtB(d.used)}／${fmtB(d.total)}・剩 ${fmtB(d.free)}</option>`).join('');
   const N=n=>(+n||0).toLocaleString(),SP=b=>fmtB(b)+'/s',sec=s=>{s=Math.round(s||0);return s<60?s+' 秒':s<3600?Math.floor(s/60)+' 分 '+(s%60)+' 秒':rsT(s)};
@@ -1041,7 +1070,7 @@ async function tRsplit(){const tb=$('#tb');let arm=0,sel=null,lastJ=null;   // V
   const draw=async()=>{let j;try{j=await api('/api/rsplit',undefined,{quiet:true})}catch(e){return}if($('#tb')!==tb||!j)return;lastJ=j;const P=j.plan||{},D=j.drives||[],st=j.state||'';
     if(!sel){const src=P.src||(D.find(d=>d.X==='R')?'R':'');const big=D.filter(d=>d.X!==src).sort((a,b)=>b.free-a.free);sel={src,mode:P.mode||'cls',t1:(P.tgts||[])[0]||(big[0]||{}).X||'',t2:(P.tgts||[])[1]||(big[1]||{}).X||''}}
     const CL=sel.mode==='cls',T=P.tgts||[];
-    const busy=st==='run'||st==='pause';let h=pace(j);
+    const busy=st==='run'||st==='pause';let h=mqPanel(j,D)+pace(j);
     h+=`<div class="rsStop wait">🗄 <b>這個功能已經封存</b>：不在工具清單裡，避免誤按。要再用：⚙ 設定 → 📱 手機網頁 最下面，或電腦按 Ctrl+Shift+R。搬移紀錄和設定都還在。</div>`;
     const warn=`🚚 <b>R 碟清空搬移</b>：把來源硬碟上所有的檔案分到兩顆硬碟（位置不變，只換磁碟代號）。<br><small>開始後 SortCut 和整理的背景工作都會先停（不讀 R）、搬完自動恢復。每個檔<b>複製 → 寫進硬碟 → 確認</b>（⚡ 快速：大小一樣、抽查 5 段一樣；🔎 完整：整檔讀回比指紋），確認過才刪 R 上的那個檔；比對不過的留在 R、最後列清單。預覽圖、分級、指紋、分類紀錄都跟著換到新位置，不用重算。關掉程式也會從剩下的接著搬。</small>`;
     h+=busy||st==='done'?`<details class="rsWarn"><summary>🚚 <b>怎麼搬的</b>（按一下看）</summary>${warn}</details>`:`<div class="rsWarn">${warn}</div>`;
@@ -1074,8 +1103,14 @@ async function tRsplit(){const tb=$('#tb');let arm=0,sel=null,lastJ=null;   // V
     const op=[...tb.querySelectorAll('details')].map(d=>d.open);tb.innerHTML=h;[...tb.querySelectorAll('details')].forEach((d,i)=>{if(op[i])d.open=true})};
   tb.oninput=e=>{if(e.target.id==='rsPct'){const v=$('#rsPv');if(v)v.textContent=e.target.value+'%';e.target.classList.remove('dim')}};
   tb.onchange=async e=>{const id=e.target.id;if(id==='rsPct'){const r=await api('/api/rsplit',{a:'speed',pct:+e.target.value,smart:false});toast('✋ '+(r.message||''));e.target.blur();return draw()}
+    if(id==='mqX'||id==='mqY'||id==='mqZ'){MQS[id.slice(2)]=e.target.value;if(id==='mqX')MQS.only.clear();return draw()}
+    if(e.target.dataset&&e.target.dataset.mqo!==undefined){const k=e.target.dataset.mqo;e.target.checked?MQS.only.add(k):MQS.only.delete(k);if(e.target.checked)[...MQS.only].forEach(o=>{if(o!==k&&o.startsWith(k+'\\'))MQS.only.delete(o)});return draw()}
     if(id==='rsS')sel.src=e.target.value;if(id==='rsM')sel.mode=e.target.value;if(id==='rsT1')sel.t1=e.target.value;if(id==='rsT2')sel.t2=e.target.value;if(sel.t1===sel.src)sel.t1='';if(sel.t2===sel.src||sel.t2===sel.t1)sel.t2='';draw()};
   tb.onclick=async e=>{const b=e.target.closest('button');if(!b)return;const go=async(a,x={})=>{b.disabled=true;const r=await api('/api/rsplit',{a,...x});toast(r.message||(r.ok?'好了':'沒成功'));b.disabled=false;draw();return r};
+    if(b.dataset.mq){const a=b.dataset.mq;if(a==='mq_scan')return go(a,{X:MQS.X});
+      if(a==='mq_create'){if(!MQS.only.size)return toast('先勾要先搬到 '+MQS.Z+': 的資料夾');if(new Set([MQS.X,MQS.Y,MQS.Z]).size<3)return toast('三顆要不同');return go(a,{X:MQS.X,Y:MQS.Y,Z:MQS.Z,only:[...MQS.only]})}
+      if(a==='mq_go'){if(!arm){arm=1;b.textContent='⚠ 再按一次：確定開始搬';setTimeout(()=>{arm=0},6000);return}arm=0;return go(a)}
+      if(a==='mq_cancel'&&!confirm('取消這個多步搬移計畫？（已經搬好的不會變回去）'))return;return go(a)}
     if(b.id==='rsSmart'){const on=!((lastJ||{}).pace||{}).smart;return go('speed',{smart:on})}
     if(b.dataset.ser)return go('speed',{serial:b.dataset.ser});if(b.dataset.ver)return go('speed',{verify:b.dataset.ver});
     if(b.id==='rsSwap'){[sel.t1,sel.t2]=[sel.t2,sel.t1];return draw()}

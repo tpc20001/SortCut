@@ -655,6 +655,10 @@ def keep_awake(on):
 
 def send_to_recycle(path):
     """Windows：丟到資源回收筒（可以救回來）."""
+    try:                                                                        # V0.6.35 🧊 搬硬碟中冷凍的硬碟：不能丟
+        import vs_freeze as FZ_
+        if FZ_.blocked(path): return False
+    except Exception: pass
     if not IS_WIN: return False
     try:
         import ctypes
@@ -4124,6 +4128,34 @@ class Engine:
     def _is_cut_file(self, p, cut_keys):
         return path_key(p) in cut_keys or self.in_cut_dir(p) or ARCH2['cut'] in Path(str(p)).parts or ARCH['cut'] in Path(str(p)).parts
 
+    def del_dirs(self):
+        """V0.6.35 每顆硬碟最外層的 X:\\DELETE（轉好之後原檔先放這裡，抽檢沒問題再刪）."""
+        D = []; seen = set()
+        for r in self.cfg.get('roots') or []:
+            a = Path(str(r)).anchor
+            if not a: continue
+            d = Path(a) / DEL_DIR; k = path_key(d)
+            if k not in seen and d.is_dir(): seen.add(k); D.append(d)
+        return D
+
+    def del_scan(self):
+        """X:\\DELETE 裡有什麼：轉檔前的原檔。轉完反而變大的那種（要還原用）不刪."""
+        rec = {}
+        for r in self.db.q("SELECT id, cv_del, cv_osz, cv_nsz FROM files WHERE length(cv_del)>0"):
+            rec[path_key(r['cv_del'])] = (int(r['id']), bool(r['cv_osz'] and r['cv_nsz'] and r['cv_nsz'] >= r['cv_osz'] * 0.98))
+        busy = set(int(x) for x in self.cv_active); L = []; skip = []
+        for d in self.del_dirs():
+            for dp, dn, fn in os.walk(d):
+                for n in fn:
+                    p = os.path.join(dp, n)
+                    try: sz = os.path.getsize(p)
+                    except OSError: continue
+                    fid, big = rec.get(path_key(p), (None, False))
+                    if big: skip.append({'path': p, 'size': sz, 'why': '轉完反而變大（原檔要留著還原）'}); continue
+                    if fid is not None and fid in busy: skip.append({'path': p, 'size': sz, 'why': '正在轉檔'}); continue
+                    L.append({'path': p, 'size': sz, 'fid': None, 'del_fid': fid, 'src': '', 'kind': 'del'})
+        return L, skip
+
     def trash_scan(self):
         """待刪資料夾裡有什麼：[{path, size, fid, src}]＋不刪的（初剪、正在用的）."""
         cut_keys = {path_key(c['out']) for c in self.db.q("SELECT out FROM cuts WHERE length(out)>0")}
@@ -4147,13 +4179,24 @@ class Engine:
                     L.append({'path': p, 'size': sz, 'fid': int(fid) if fid is not None else None, 'src': src or ''})
         return L, skip
 
-    def trash_purge(self, dry=True):
-        """dry＝只算有幾個、多大；不然在背景永久刪除（硬碟空間馬上回來，不經過資源回收筒）."""
-        L, skip = self.trash_scan(); by = {}
+    def trash_purge(self, dry=True, incl_del=False, only_del=False):
+        """dry＝只算有幾個、多大；不然在背景永久刪除（硬碟空間馬上回來，不經過資源回收筒）.
+        V0.6.35 incl_del＝連 X:\\DELETE（轉檔前的原檔）一起；only_del＝只清 DELETE."""
+        L, skip = self.trash_scan()
+        try: DL, dskip = self.del_scan()
+        except Exception: DL, dskip = [], []; self.log.err('清空待刪：讀 DELETE')
+        info = {'del_n': len(DL), 'del_b': sum(x['size'] for x in DL), 'del_skip': len(dskip), 'del_skip_b': sum(x['size'] for x in dskip),
+                'del_dirs': [str(d) for d in self.del_dirs()], 'trash_n': len(L), 'trash_b': sum(x['size'] for x in L)}
+        try:
+            fr = self.db.one("SELECT COUNT(*), TOTAL(size) FROM files WHERE missing=0 AND grade='F'"); info['f_n'] = int(fr[0] or 0); info['f_b'] = int(fr[1] or 0)   # F 級還沒移到待刪的
+        except Exception: info['f_n'] = info['f_b'] = 0
+        if only_del: L, skip = DL, dskip
+        elif incl_del: L = L + DL; skip = skip + dskip
+        by = {}
         for x in L:
             k = Path(x['path']).anchor.upper(); n_, b_ = by.get(k, (0, 0)); by[k] = (n_ + 1, b_ + x['size'])
         res = {'ok': True, 'n': len(L), 'bytes': sum(x['size'] for x in L), 'by': by, 'skip': len(skip), 'skip_cut': sum(1 for x in skip if x['why'].startswith('初剪')),
-               'dirs': [str(d) for d in self.trash_dirs()]}
+               'dirs': [str(d) for d in self.trash_dirs()], **info}
         if dry or not L: return dict(res, message=f'待刪裡有 {len(L):,} 個檔、{fmt_b(res["bytes"])}' + (f'（{len(skip)} 個不刪：初剪或正在用）' if skip else ''))
         if getattr(self, '_trash_busy', False): return {'ok': False, 'message': '上一次清空待刪還在進行'}
         self._trash_busy = True; t = self.task('op', f'清空待刪：{len(L):,} 個檔')
@@ -4166,12 +4209,18 @@ class Engine:
                     except FileNotFoundError: pass
                     except Exception as ex: bad.append(f'{Path(x["path"]).name}（{ex}）'); continue
                     ok += 1; fb += x['size']
+                    if x.get('kind') == 'del':                                   # DELETE 裡的轉檔原檔：轉好的那部留著，只把「原檔在 DELETE」的紀錄清掉
+                        self.oplog('purge', src=x['path'], fid=x.get('del_fid'), size=x['size'], detail='清空待刪：DELETE 裡轉檔前的原檔，永久刪除')
+                        if x.get('del_fid') is not None:
+                            try: self.db.x("UPDATE files SET cv_del='' WHERE id=?", (int(x['del_fid']),))
+                            except Exception: pass
+                        continue
                     self.oplog('purge', src=x['path'], fid=x['fid'], size=x['size'], detail='清空待刪：永久刪除' + (f'（原本在 {x["src"]}）' if x['src'] else ''))
                     try: self.db.x("UPDATE oplog SET undone=-1 WHERE kind='trash' AND undone=0 AND dst=?", (x['path'],))     # 已經刪掉了：「↩ 復原上一次移到待刪」不要再找它
                     except Exception: pass
                     if x['fid'] is not None: fids.append(x['fid'])
                 n_db = self._forget_files(fids)
-                for d in self.trash_dirs():                                          # 空掉的子資料夾也拿掉（待刪本身留著）
+                for d in self.trash_dirs() + self.del_dirs():                       # 空掉的子資料夾也拿掉（待刪、DELETE 本身留著）
                     for dp, dn, fn in os.walk(d, topdown=False):
                         if path_key(dp) != path_key(d) and not os.listdir(dp):
                             try: os.rmdir(dp)

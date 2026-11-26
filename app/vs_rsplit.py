@@ -114,6 +114,7 @@ class RSplit:
             c.execute('CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, src TEXT, dst TEXT, size INTEGER, tgt TEXT, st INTEGER DEFAULT 0, err TEXT, h TEXT)')
             c.execute('CREATE INDEX IF NOT EXISTS i_st ON items(st, tgt)')
             c.execute('CREATE INDEX IF NOT EXISTS i_sz ON items(st, tgt, size)'); c.execute('PRAGMA synchronous=NORMAL'); c.commit()   # V0.5.97
+            c.execute('CREATE TABLE IF NOT EXISTS snap(rel TEXT PRIMARY KEY, size INTEGER)'); c.commit()                                # V0.6.35 快照：某顆硬碟「原本」有哪些檔
         return c
 
     def q(self, sql, a=()):
@@ -199,21 +200,34 @@ class RSplit:
         except Exception: pass
         return out
 
-    def plan(self, src, tgts, mode='auto'):
+    def plan(self, src, tgts, mode='auto', only=None, snap=False, keep_src=False, step=''):
         if getattr(self, 'planning', False): return {'ok': False, 'message': '已經在算了，等一下'}
         self.planning = True; t0 = time.time()
         try:
-            r = self._plan(src, tgts, mode)
+            r = self._plan(src, tgts, mode, only=only, snap=snap, keep_src=keep_src, step=step)
             try: self.E.log.w(f"🚚 R 碟搬移「先算一下」：{time.time() - t0:.0f} 秒・{r.get('n', 0):,} 個檔・{r.get('message', '') or 'OK'}")
             except Exception: pass
             return r
         finally: self.planning = False; self.pmsg = ''
 
-    def _plan(self, src, tgts, mode='auto'):
+    def _plan(self, src, tgts, mode='auto', only=None, snap=False, keep_src=False, step=''):
         """只讀：算出每個資料夾放哪顆、空間夠不夠；同時把要搬的檔案清單存起來（開始時就不用再算）.
         mode='auto' 兩顆平均；mode='cls'（V0.5.86）已分類放目的 ①、還沒分類放目的 ②（② 放不下的從大的資料夾開始補到 ①）."""
         S = str(src)[:1].upper(); T = [str(t)[:1].upper() for t in tgts if t]; mode = 'cls' if mode == 'cls' else 'auto'
-        if len(T) != 2 or len(set(T + [S])) != 3: return {'ok': False, 'message': '來源和兩顆目的要是三顆不同的硬碟'}
+        if not 1 <= len(T) <= 2 or len(set(T + [S])) != len(T) + 1: return {'ok': False, 'message': '來源和目的要是不同的硬碟'}
+        if len(T) == 1: mode = 'auto'
+        ONLY = [os.path.normcase(str(o).strip('\\/').replace('/', os.sep)) for o in (only or []) if str(o).strip('\\/')]     # V0.6.35 只搬這幾個資料夾
+        SNAP = self.snap_set() if snap else None                                  # V0.6.35 只搬「開始前記下來的」那些檔（例如 H 原本的）
+        if snap and not SNAP: return {'ok': False, 'message': '沒有記下來的檔案清單（快照）'}
+
+        def inc_dir(rel):
+            if not ONLY: return True
+            r_ = os.path.normcase(rel); return any(r_ == o or r_.startswith(o + os.sep) or o.startswith(r_ + os.sep) for o in ONLY)
+
+        def inc_file(rel):
+            r_ = os.path.normcase(rel)
+            if ONLY and not any(r_.startswith(o + os.sep) for o in ONLY): return False
+            return SNAP is None or r_ in SNAP
         if self.state() in ('run', 'pause'): return {'ok': False, 'message': '搬到一半，不能重算（要先「清掉這次的紀錄」）'}
         root = DR(S)
         if not os.path.isdir(root): return {'ok': False, 'message': f'{S}: 沒接著'}
@@ -231,9 +245,10 @@ class RSplit:
                     if e.is_dir(follow_symlinks=False):
                         if rel_d == '' and e.name.lower() in SKIP_TOP: continue
                         if rel.lower().replace('/', os.sep) == os.path.join('videosift', '.vsdata', 'thumbs'): continue
+                        if not inc_dir(rel): continue
                         stack.append(rel); continue
                     if not e.is_file(follow_symlinks=False): continue
-                    if self._skip_rel(rel): continue
+                    if self._skip_rel(rel) or not inc_file(rel): continue
                     sz = e.stat(follow_symlinks=False).st_size
                 except Exception: continue
                 parts = rel.split(os.sep)
@@ -285,6 +300,7 @@ class RSplit:
             e_ = place(G['cls'], lambda: [T[0], T[1]]) or place(G['unc'], lambda: [T[1], T[0]], fill=True)
         else:
             e_ = place(G['unc'], lambda: sorted(T, key=lambda x: -rem[x]))
+        if not nf: return {'ok': False, 'message': '沒有要搬的檔案', 'total': 0}
         if e_: return {'ok': False, 'message': e_, 'total': tot, 'free': free}
         amap = {(a[0], a[1]): a[2] for a in assign}
 
@@ -308,9 +324,187 @@ class RSplit:
         spill = sum(1 for _r, z, c_ in files if mode == 'cls' and not c_ and TG[_r] == T[0]); spill_b = sum(z for _r, z, c_ in files if mode == 'cls' and not c_ and TG[_r] == T[0])
         P = {'ok': True, 'mode': mode, 'src': S, 'tgts': T, 'n': nf, 'total': tot, 'free': {t: free[t] + MARGIN for t in T}, 'per': per, 'pern': pern,
              'cls_n': cls_n, 'cls_b': cls_b, 'unc_n': nf - cls_n, 'unc_b': tot - cls_b, 'spill_n': spill, 'spill_b': spill_b,
-             'units': [{'rel': a[0] or '（根目錄的檔）', 'kind': a[1], 'tgt': a[2], 'b': a[3]} for a in sorted(assign, key=lambda a: (a[2], -a[3]))][:3000], 't': time.time()}
+             'units': [{'rel': a[0] or '（根目錄的檔）', 'kind': a[1], 'tgt': a[2], 'b': a[3]} for a in sorted(assign, key=lambda a: (a[2], -a[3]))][:3000], 't': time.time(),
+             'only': list(only or []), 'snap': bool(snap), 'keep_src': bool(keep_src), 'step': step}
         self.set_meta('plan', P); self.set_meta('state', 'planned')
         return P
+
+    # ---------------------------------------------------------------- V0.6.35 📋 多步搬移（例：D 選的 → G、D 剩下 → H、H 原本 → D、對調代號）
+    def snap_set(self):
+        return {r[0] for r in self.q('SELECT rel FROM snap')}
+
+    def mq(self):
+        try: return dict(self.E.cfg.get('mvq') or {})
+        except Exception: return {}
+
+    def _mq_save(self, Q): self.E.cfg.set('mvq', Q)
+
+    def _walk(self, X, msg=''):
+        """X 碟上所有要搬的檔：(rel, size)；跳過資源回收筒、預覽圖資料夾這些（跟搬的時候一樣）."""
+        root = DR(X); stack = ['']; n = 0; b = 0; last = time.time()
+        while stack:
+            rel_d = stack.pop()
+            try: it = list(os.scandir(L(os.path.join(root, rel_d) if rel_d else root)))
+            except Exception: continue
+            for e in it:
+                rel = os.path.join(rel_d, e.name) if rel_d else e.name
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        if rel_d == '' and e.name.lower() in SKIP_TOP: continue
+                        if rel.lower().replace('/', os.sep) == os.path.join('videosift', '.vsdata', 'thumbs'): continue
+                        stack.append(rel); continue
+                    if not e.is_file(follow_symlinks=False) or self._skip_rel(rel): continue
+                    sz = e.stat(follow_symlinks=False).st_size
+                except Exception: continue
+                n += 1; b += sz
+                if time.time() - last > 1: last = time.time(); self.mqs['msg'] = f'{msg}讀 {X}: 的檔案：{n:,} 個、{fmt_b(b)}…'
+                yield rel, sz
+
+    def mq_scan(self, X):
+        """讀 X 碟第一層、第二層資料夾的大小（給「① 先搬哪些資料夾」勾）."""
+        X = str(X or '')[:1].upper()
+        if not X or not os.path.isdir(DR(X)): return {'ok': False, 'message': f'{X}: 沒接著'}
+        if (getattr(self, 'mqs', None) or {}).get('busy'): return {'ok': False, 'message': '已經在讀了，等一下'}
+        self.mqs = {'X': X, 'busy': True, 'msg': f'讀 {X}: …', 'tops': [], 'total': 0}
+
+        def go():
+            T = {}; tot = 0
+            try:
+                for rel, sz in self._walk(X):
+                    tot += sz; parts = rel.split(os.sep)
+                    if len(parts) == 1: k1 = '（根目錄的檔）'
+                    else: k1 = parts[0]
+                    d = T.setdefault(k1, {'rel': k1, 'b': 0, 'n': 0, 'kids': {}}); d['b'] += sz; d['n'] += 1
+                    if len(parts) >= 3:
+                        k2 = os.path.join(parts[0], parts[1]); kd = d['kids'].setdefault(k2, {'rel': k2, 'b': 0, 'n': 0}); kd['b'] += sz; kd['n'] += 1
+                tops = sorted(T.values(), key=lambda x: -x['b'])
+                for t in tops: t['kids'] = sorted(t['kids'].values(), key=lambda x: -x['b'])[:60]
+                self.mqs.update(tops=tops, total=tot, msg=f'{X}: 共 {fmt_b(tot)}', t=time.time())
+            except Exception as ex: self.mqs['msg'] = f'讀不到：{ex}'
+            finally: self.mqs['busy'] = False
+        threading.Thread(target=go, name='RSplitMQScan', daemon=True).start()
+        return {'ok': True, 'message': f'讀 {X}: 的資料夾大小（幾分鐘）'}
+
+    def mq_create(self, X, Y, Z, only):
+        """排好計畫、先算空間夠不夠、記下 Y 原本有哪些檔（快照）。還沒開始搬."""
+        X, Y, Z = (str(v or '')[:1].upper() for v in (X, Y, Z))
+        if len({X, Y, Z}) != 3 or not all((X, Y, Z)): return {'ok': False, 'message': '三顆要是不同的硬碟'}
+        for v in (X, Y, Z):
+            if not os.path.isdir(DR(v)): return {'ok': False, 'message': f'{v}: 沒接著'}
+        if self.state() in ('run', 'pause') or self.run: return {'ok': False, 'message': '現在有一次搬移在進行（先停好、清掉紀錄）'}
+        if (self.mq() or {}).get('state') == 'run': return {'ok': False, 'message': '多步搬移正在進行'}
+        if (getattr(self, 'mqs', None) or {}).get('busy'): return {'ok': False, 'message': '正在讀硬碟，等一下'}
+        only = [str(o).strip('\\/') for o in (only or []) if str(o).strip('\\/')]
+        if not only: return {'ok': False, 'message': f'① 要先勾 {X}: 上要先搬到 {Z}: 的資料夾'}
+        self.mqs = {'X': X, 'busy': True, 'msg': '開始檢查…', 'tops': (getattr(self, 'mqs', None) or {}).get('tops') or [], 'total': 0}
+
+        def go():
+            try:
+                ON = [os.path.normcase(o.replace('/', os.sep)) for o in only]
+                s1 = s2 = 0; restX = set()
+                for rel, sz in self._walk(X, '① ② 檢查：'):
+                    r_ = os.path.normcase(rel)
+                    if any(r_.startswith(o + os.sep) for o in ON): s1 += sz
+                    else: s2 += sz; restX.add(r_)
+                rows = []; s3 = 0
+                for rel, sz in self._walk(Y, '③ 記下原本的檔：'):
+                    rows.append((os.path.normcase(rel), sz)); s3 += sz
+                with self.lock:
+                    c = self.db(); c.execute('DELETE FROM snap'); c.executemany('INSERT OR REPLACE INTO snap(rel,size) VALUES(?,?)', rows); c.commit()
+                col = [r for r, _z in rows if r in restX]
+                du = {v: shutil.disk_usage(DR(v)) for v in (X, Y, Z)}
+                pr = []
+                if s1 + MARGIN > du[Z].free: pr.append(f'① {Z}: 空間不夠：要 {fmt_b(s1)}，只剩 {fmt_b(du[Z].free)}（每顆留 {fmt_b(MARGIN)}）')
+                if s2 + MARGIN > du[Y].free: pr.append(f'② {Y}: 空間不夠：要 {fmt_b(s2)}，只剩 {fmt_b(du[Y].free)}')
+                if s3 + MARGIN > du[X].total * 0.995: pr.append(f'③ {X}: 搬空後也放不下：要 {fmt_b(s3)}，{X}: 總共 {fmt_b(du[X].total)}')
+                Q = {'X': X, 'Y': Y, 'Z': Z, 'only': only, 's': [s1, s2, s3], 'n_snap': len(rows),
+                     'free': {v: du[v].free for v in (X, Y, Z)}, 'total': {v: du[v].total for v in (X, Y, Z)},
+                     'after': {Z: du[Z].free - s1, Y: du[Y].free - s2, X: du[X].total - s3},
+                     'collide_n': len(col), 'collide_ex': col[:10], 'problems': pr, 'ok': not pr, 'i': 0, 'done': [],
+                     'state': 'ready' if not pr else 'bad', 'msg': '', 'notice': '', 't': time.time(),
+                     'steps': [{'k': 'move', 'src': X, 'tgt': Z, 'only': only, 'title': f'① {X}: 選的資料夾 → {Z}:', 'notify': True},
+                               {'k': 'move', 'src': X, 'tgt': Y, 'title': f'② {X}: 剩下的 → {Y}:'},
+                               {'k': 'move', 'src': Y, 'tgt': X, 'snap': True, 'title': f'③ {Y}: 原本的 → {X}:'},
+                               {'k': 'swap', 'title': f'④ 到「磁碟管理」對調 {X}:／{Y}: 代號'}]}
+                self._mq_save(Q)
+                self.E.log.w(f'📋 多步搬移排好：① {X}:→{Z}: {fmt_b(s1)}、② {X}:→{Y}: {fmt_b(s2)}、③ {Y}:→{X}: {fmt_b(s3)}（{len(rows):,} 個檔的快照）' + ('；' + '；'.join(pr) if pr else '，空間都夠'))
+                self.mqs['msg'] = '檢查好了' if not pr else '空間不夠：' + '；'.join(pr)
+            except Exception as ex:
+                self.mqs['msg'] = f'檢查失敗：{ex}'; self.E.log.err('📋 多步搬移：檢查')
+            finally: self.mqs['busy'] = False
+        threading.Thread(target=go, name='RSplitMQCheck', daemon=True).start()
+        return {'ok': True, 'message': '檢查空間、記下 ' + Y + ': 原本的檔（大概要幾分鐘）'}
+
+    def mq_go(self):
+        Q = self.mq()
+        if not Q: return {'ok': False, 'message': '還沒有排計畫'}
+        if Q.get('state') == 'bad': return {'ok': False, 'message': '空間不夠，不能開始：' + '；'.join(Q.get('problems') or [])}
+        if Q.get('state') == 'run': return {'ok': False, 'message': '已經在搬了'}
+        if self.state() == 'pause' and (self.meta('plan') or {}).get('step'):                # 這一步暫停中 → 接著搬
+            Q['state'] = 'run'; Q['msg'] = ''; self._mq_save(Q); return self.start()
+        if Q.get('state') not in ('ready', 'stopped'): return {'ok': False, 'message': '現在不能開始'}
+        Q['state'] = 'run'; Q['msg'] = ''; self._mq_save(Q)
+        threading.Thread(target=self._mq_step, name='RSplitMQ', daemon=True).start()
+        return {'ok': True, 'message': '開始：先停好轉檔／H265，再照順序一步一步搬'}
+
+    def _mq_step(self):
+        Q = self.mq(); i = int(Q.get('i') or 0); st = (Q.get('steps') or [])[i] if i < len(Q.get('steps') or []) else None
+        if st is None: Q['state'] = 'done'; self._mq_save(Q); self._freeze_off(); return
+        if st['k'] == 'swap':
+            Q['state'] = 'swap'; Q['msg'] = self._swap_msg(Q); self._mq_save(Q); self._freeze_off(); self.E.remap_msg = Q['msg']; self.E.log.w('📋 ' + Q['msg']); return
+        self._freeze_on()
+        try:
+            if self.state() in ('done', 'planned', ''): self.ctl('reset')
+        except Exception: pass
+        self.E.log.w(f"📋 多步搬移：{st['title']} 先算一下")
+        r = self.plan(st['src'], [st['tgt']], 'auto', only=st.get('only'), snap=bool(st.get('snap')), keep_src=True, step=st['title'])
+        if not r.get('ok'):
+            if r.get('message') == '沒有要搬的檔案':                                    # 這一步沒東西：直接下一步
+                Q = self.mq(); Q.setdefault('done', []).append({'i': i, 'title': st['title'], 'n': 0, 'b': 0, 'fail': 0, 't': time.time()}); Q['i'] = i + 1; self._mq_save(Q)
+                return self._mq_step()
+            Q = self.mq(); Q['state'] = 'stopped'; Q['msg'] = f"{st['title']}：{r.get('message', '')}"; self._mq_save(Q); self._freeze_off()
+            self.E.log.w('📋 多步搬移停下：' + Q['msg']); return
+        r2 = self.start()
+        if not r2.get('ok'):
+            Q = self.mq(); Q['state'] = 'stopped'; Q['msg'] = f"{st['title']}：{r2.get('message', '')}"; self._mq_save(Q); self._freeze_off()
+            self.E.log.w('📋 多步搬移停下：' + Q['msg'])
+
+    def _swap_msg(self, Q):
+        X, Y = Q.get('X'), Q.get('Y')
+        return (f'✅ 搬完了！最後一步：開「磁碟管理」（開始鍵按右鍵 → 磁碟管理），把現在的 {X}: 先改成別的代號（例如 W:），'
+                f'再把 {Y}: 改成 {X}:、W: 改成 {Y}:。SortCut 會用硬碟序號自己認出來、把紀錄改過去（分級、預覽圖都在）。改好按「✔ 代號換好了」')
+
+    def _mq_after(self, v):
+        Q = self.mq()
+        if Q.get('state') != 'run': return
+        i = int(Q.get('i') or 0); st = Q['steps'][i]
+        Q.setdefault('done', []).append({'i': i, 'title': st['title'], 'n': v.get('done_n', 0), 'b': v.get('done_b', 0), 'fail': v.get('fail_n', 0), 't': time.time()})
+        if v.get('fail_n'):
+            Q['state'] = 'stopped'; Q['msg'] = f"{st['title']}：有 {v['fail_n']:,} 個沒搬成（原檔都還在），先看下面「沒搬成的」，處理好再按繼續"
+            self._mq_save(Q); self.E.log.w('📋 ' + Q['msg']); self._freeze_off(); return
+        if st.get('notify'):
+            Q['notice'] = f"✅ {st['title']} 搬完了（{v.get('done_n', 0):,} 個、{fmt_b(v.get('done_b', 0))}）→ 現在可以開 FusionStitch 轉到 {Q.get('Z')}: 了"
+            self.E.remap_msg = Q['notice']; self.E.log.w('📋 ' + Q['notice'])
+        Q['i'] = i + 1; self._mq_save(Q)
+
+        def nxt():
+            time.sleep(5); self._mq_step()
+        threading.Thread(target=nxt, name='RSplitMQ', daemon=True).start()
+
+    def mq_ctl(self, a):
+        Q = self.mq()
+        if a == 'cancel':
+            if Q.get('state') == 'run' or self.run: return {'ok': False, 'message': '正在搬，先按暫停、等「已停好」'}
+            self.E.cfg.set('mvq', {}); self._freeze_off(); return {'ok': True, 'message': '計畫取消了（已經搬好的不會變回去）'}
+        if a == 'swapped':
+            Q['state'] = 'done'; Q['msg'] = '✔ 全部完成'; self._mq_save(Q); self._freeze_off()
+            try: self.E._remap_want = True
+            except Exception: pass
+            return {'ok': True, 'message': '✔ 全部完成；SortCut 會自己認出換過代號的硬碟、把紀錄改過去'}
+        if a == 'pause':
+            r = self.ctl('pause'); Q['state'] = 'stopped'; Q['msg'] = '⏸ 暫停（手上的做完再停），按「▶ 繼續」接著搬'; self._mq_save(Q); return r
+        if a == 'notice_ok': Q['notice'] = ''; self._mq_save(Q); return {'ok': True}
+        return {'ok': False, 'message': '不懂'}
 
     # ---------------------------------------------------------------- 開始／暫停／停
     def state(self):
@@ -329,8 +523,59 @@ class RSplit:
         self._remember_vols()
         self._prepare(P); self.set_meta('state', 'run')
         if not self.meta('t0'): self.set_meta('t0', time.time())
-        self.E.log.w(f"🚚 R 碟清空搬移開始：{P['src']}: → {P['tgts'][0]}: ＋ {P['tgts'][1]}:（{P['n']:,} 個檔、{fmt_b(P['total'])}）")
-        self.kick(); return {'ok': True, 'message': '開始搬了（背景跑，可以關畫面）'}
+        self.E.log.w(f"🚚 搬硬碟開始{('（' + P['step'] + '）') if P.get('step') else ''}：{P['src']}: → " + ' ＋ '.join(f'{t}:' for t in P['tgts']) + f"（{P['n']:,} 個檔、{fmt_b(P['total'])}）")
+        self._freeze_on()
+        threading.Thread(target=self._wait_idle_kick, name='RSplitWaitIdle', daemon=True).start()
+        return {'ok': True, 'message': '先等轉檔／H265 手上的停好，確認沒有在動才開始搬（背景跑，可以關畫面）'}
+
+    # ---------------------------------------------------------------- V0.6.35 開始前：確定轉檔、H265 都沒有在動；搬的時候硬碟冷凍
+    def busy_conv(self):
+        """還在動的轉檔（SortCut）、H265（整理的瘦身）有幾個."""
+        n = 0
+        try: n += len(getattr(self.E, 'cv_active', {}) or {})
+        except Exception: pass
+        FE = self.fe()
+        try:
+            SL = getattr(FE, 'slim', None) if FE is not None else None
+            if SL is not None and SL.st.get('run'): n += 1
+        except Exception: pass
+        return n
+
+    def _wait_idle_kick(self):
+        t0 = time.time(); self.waiting = True
+        try:
+            while not self.stop_req and self.state() == 'run':
+                b = self.busy_conv()
+                if not b: break
+                self.pmsg = f'等轉檔／H265 停好：還有 {b} 個在收尾（{time.time() - t0:.0f} 秒），停好才開始搬，檔案不會掉'
+                if time.time() - t0 > 1800:
+                    self.set_meta('state', 'pause'); self.err = '轉檔／H265 等了 30 分鐘還沒停好，先不搬（暫停了，停好後再按繼續）'
+                    self.E.log.w('🚚 ' + self.err); self._freeze_off(); return
+                time.sleep(2)
+            self.pmsg = ''
+            if self.state() == 'run' and not self.stop_req:
+                self.E.log.w('🚚 確認轉檔／H265 都沒有在動 → 開始搬'); self.kick()
+        finally: self.waiting = False
+
+    def freeze_letters(self):
+        L = set(); P = self.meta('plan') or {}
+        L |= {P.get('src', '')} | set(P.get('tgts') or [])
+        Q = self.mq()
+        if Q and Q.get('state') in ('run', 'wait'): L |= {Q.get('X', ''), Q.get('Y', ''), Q.get('Z', '')}
+        return {x for x in L if x}
+
+    def _freeze_on(self):
+        try:
+            import vs_freeze as FZ
+            FZ.set_frozen(self.freeze_letters(), '🚚 搬硬碟中')
+            self.E.log.w('🧊 ' + '、'.join(f'{x}:' for x in sorted(FZ.letters())) + ' 冷凍：搬完或按暫停前只能看、不能改（SortCut、整理、H265 都一樣）')
+        except Exception: pass
+
+    def _freeze_off(self):
+        try:
+            import vs_freeze as FZ
+            if FZ.active(): FZ.clear(); self.E.log.w('🧊 解凍：硬碟可以改了')
+        except Exception: pass
 
     def _prepare(self, P):
         """暫停所有背景工作（不讀 R）、兩顆新硬碟加進影片庫和整理的清單（紀錄才有地方掛）."""
@@ -478,6 +723,7 @@ class RSplit:
 
     def kick(self):
         if self.run: return
+        self._freeze_on()                                                       # V0.6.35 搬的時候這幾顆冷凍
         self.stop_req = False; self.no_new = False; self.run = True; self.kick_t = time.time(); self.act_base = float(self.meta('act', 0) or 0); self.mode_t = time.time()
         T = list((self.meta('plan') or {}).get('tgts') or [])
         try: self.x('UPDATE items SET st=0 WHERE st=5')                             # 上次搬到一半（關掉、更新）的放回去
@@ -954,6 +1200,7 @@ class RSplit:
         if not self.stop_req and self.state() == 'run':
             left = self.q('SELECT COUNT(*) FROM items WHERE st IN (0,1,5)')[0][0]
             if left == 0: self._finish()
+        if not ((self.mq() or {}).get('state') == 'run' and self.state() in ('done', 'run')): self._freeze_off()   # 暫停、停止、全部搬完 → 解凍
 
     def _ver(self, iid, s, d, sz, t, h, dc, inline=False):
         if inline:                                                               # ⚡ 快速：在複製那條線直接確認、改紀錄、刪 R 的
@@ -1079,7 +1326,7 @@ class RSplit:
                 if not os.listdir(dp): os.rmdir(dp)
             except Exception: pass
         failed = self.q('SELECT COUNT(*) FROM items WHERE st=3')[0][0]
-        if not failed:                                                           # 都搬好了：影片庫／整理的清單把 R 拿掉（之後 R 給 TikLive，不要再掃它）
+        if not failed and not P.get('keep_src'):                                                           # 都搬好了：影片庫／整理的清單把 R 拿掉（之後 R 給 TikLive，不要再掃它）
             R = [str(x) for x in E.cfg.get('roots') or [] if str(x)[:1].upper() != S]; E.cfg.set('roots', R)
             FE = self.fe()
             if FE is not None:
@@ -1092,9 +1339,13 @@ class RSplit:
         except Exception: pass
         self.set_meta('state', 'done'); self.set_meta('t1', time.time())
         v = self.view()
-        msg = f"🚚 R 碟清空搬移完成：搬好 {v['done_n']:,} 個、{fmt_b(v['done_b'])}；沒搬成 {v['fail_n']:,} 個；{S}: 還剩 {v['left_n']:,} 個檔"
+        msg = f"🚚 搬硬碟{('（' + P['step'] + '）') if P.get('step') else ''}完成：搬好 {v['done_n']:,} 個、{fmt_b(v['done_b'])}；沒搬成 {v['fail_n']:,} 個"
         try: E.log.w(msg); E.remap_msg = msg
         except Exception: pass
+        try: self._mq_after(v)
+        except Exception:
+            try: E.log.err('🚚 多步搬移：下一步')
+            except Exception: pass
 
     def _restore(self, why):
         """背景工作恢復成搬之前的樣子."""
@@ -1149,6 +1400,11 @@ class RSplit:
                   'pace': {'verify': self.vmode(), 'pct': self.pct if self.run else (100 if smart else man), 'why': self.pct_why, 'man': man, 'smart': smart, 'serial': self.serial, 'ser': ser,
                            'busy': getattr(self, 'busy', {}), 'temp': getattr(self, 'temp', None), 'log': [f'{time.strftime("%H:%M", time.localtime(t))} {w}' for t, w in list(self.plog)[-8:][::-1]]}})
         V['drv'] = self._drv_stats(P); V['draining'] = bool(self.run and st != 'run')
+        V['mq'] = self.mq(); M_ = dict(getattr(self, 'mqs', None) or {}); V['mqs'] = M_; V['waiting'] = bool(getattr(self, 'waiting', False))   # V0.6.35
+        try:
+            import vs_freeze as FZ
+            V['freeze'] = FZ.view()
+        except Exception: V['freeze'] = {}
         if st in ('pause', 'planned') and not self.run:
             try: V['vols'] = self.vol_check()
             except Exception: V['vols'] = []
@@ -1183,7 +1439,8 @@ def boot(E):
             while old.run and time.time() - t0 < 300: time.sleep(1)
         o = R['obj'] = RSplit(E)
         try:
-            if o.state() == 'run': o.E.log.w('🚚 R 碟清空搬移：接著搬（剛開程式／更新）'); o._remember_vols(); o._prepare(o.meta('plan')); o.kick()
+            if o.state() == 'run': o.E.log.w('🚚 搬硬碟：接著搬（剛開程式／更新；先確認轉檔／H265 沒在動）'); o._remember_vols(); o._prepare(o.meta('plan')); o._freeze_on(); o._wait_idle_kick()
+            elif (o.mq() or {}).get('state') == 'run' and o.state() in ('done', 'planned', ''): o.E.log.w('📋 多步搬移：接著下一步（剛開程式／更新）'); o._mq_step()
             elif o.state() == 'pause': o.E.log.w('🚚 R 碟清空搬移：暫停中（不會自己開始；硬碟對好後按「▶ 繼續」）')
         except Exception: pass
     threading.Thread(target=go, name='RSplitBoot', daemon=True).start()

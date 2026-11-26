@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.34'
+APP_VERSION = '0.6.35'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -2551,15 +2551,22 @@ class BrowsePage(QWidget):
         m.addSeparator(); m.addAction('📒 看操作紀錄（30 天，可以搬回來）', lambda: self.win.nav.setCurrentRow(6))
 
     def purge_trash(self):
-        def ask(r):
-            if not r.get('n'): self.win.msg('待刪資料夾是空的' + (f'（{r["skip"]} 個是初剪或正在用，保留）' if r.get('skip') else '')); return
-            by = '\n'.join(f'　{k} {n:,} 個・{fmt_b(b)}' for k, (n, b) in sorted((r.get('by') or {}).items()))
-            if QMessageBox.question(self, '🔥 清空待刪', f'永久刪除各硬碟 VideoSIFT\\待刪 裡的 {r["n"]:,} 個檔（{fmt_b(r["bytes"])}）？\n{by}\n\n'
-                                    '・不經過資源回收筒，空間馬上回來，刪了救不回來\n・它們的預覽圖、人臉資料、清單裡的那一筆一起清掉\n'
-                                    f'・初剪的檔 100% 保留' + (f'（這次有 {r["skip_cut"]} 個初剪的不刪）' if r.get('skip_cut') else '') +
-                                    '\n・每一個都記在「📒 操作紀錄」') != QMessageBox.Yes: return
-            if r['n'] > 20 and QMessageBox.question(self, '🔥 清空待刪', f'再確認一次：永久刪除 {r["n"]:,} 個檔、{fmt_b(r["bytes"])}？') != QMessageBox.Yes: return
-            bg(lambda: ENG.trash_purge(dry=False), lambda x: (self.win.msg('🔥 ' + x.get('message', ''), 12000), QTimer.singleShot(3000, self.load_list)))
+        def ask(r):                                                              # V0.6.35 也看 X:\DELETE（轉檔前的原檔），可以選清哪個
+            fl = (f'\n\n（另外 F 級還有 {r.get("f_n", 0):,} 部・{fmt_b(r.get("f_b", 0))} 還在原位、沒移到待刪：要清的話先把 F 歸到待刪）' if r.get('f_n') else '')
+            tn, tb, dn, db_ = int(r.get('trash_n') or 0), int(r.get('trash_b') or 0), int(r.get('del_n') or 0), int(r.get('del_b') or 0)
+            if not tn and not dn: QMessageBox.information(self, '🔥 清空待刪', '待刪和 DELETE 都是空的' + (f'（{r["skip"]} 個是初剪或正在用，保留）' if r.get('skip') else '') + fl); return
+            mb = QMessageBox(self); mb.setWindowTitle('🔥 清空待刪'); mb.setIcon(QMessageBox.Warning)
+            mb.setText(f'要永久刪除哪些？（不經過資源回收筒，刪了救不回來）\n\n'
+                       f'🗑 VideoSIFT\\待刪：{tn:,} 個・{fmt_b(tb)}（預覽圖、人臉、清單那一筆一起清；初剪的 100% 保留）\n'
+                       f'🔁 X:\\DELETE（轉檔前的原檔）：{dn:,} 個・{fmt_b(db_)}（轉好的 MP4 留著）' + (f'；轉完變大的 {r.get("del_skip", 0)} 個原檔保留' if r.get('del_skip') else '') + fl)
+            bt = mb.addButton(f'只清待刪（{fmt_b(tb)}）', QMessageBox.AcceptRole) if tn else None
+            bd = mb.addButton(f'只清 DELETE（{fmt_b(db_)}）', QMessageBox.AcceptRole) if dn else None
+            bb = mb.addButton(f'兩個都清（{fmt_b(tb + db_)}）', QMessageBox.AcceptRole) if tn and dn else None
+            mb.addButton('取消', QMessageBox.RejectRole); mb.exec(); c = mb.clickedButton()
+            if c is None or c not in [x for x in (bt, bd, bb) if x is not None]: return
+            w = 'only' if c is bd else 'with' if c is bb else ''; n = dn if w == 'only' else tn + dn if w == 'with' else tn; b_ = db_ if w == 'only' else tb + db_ if w == 'with' else tb
+            if n > 20 and QMessageBox.question(self, '🔥 清空待刪', f'再確認一次：永久刪除 {n:,} 個檔、{fmt_b(b_)}？') != QMessageBox.Yes: return
+            bg(lambda: ENG.trash_purge(dry=False, incl_del=(w == 'with'), only_del=(w == 'only')), lambda x: (self.win.msg('🔥 ' + x.get('message', ''), 12000), QTimer.singleShot(3000, self.load_list)))
         bg(lambda: ENG.trash_purge(dry=True), ask)
 
     def archive_grade(self, g, folder=None):
@@ -4487,7 +4494,84 @@ class RSplitPage(QWidget):
         self.b_reset.clicked.connect(lambda: QMessageBox.question(self, '清掉紀錄', '清掉這次的搬移紀錄？（已經搬好的檔不會動）') == QMessageBox.Yes and self._ctl('reset'))
         for cb in (self.src, self.t1): cb.currentIndexChanged.connect(self._fix)
         self._state = ''; self._D = []
+        self._mq_build(v)
         self.load_drives(); self.tm = QTimer(self); self.tm.timeout.connect(self.refresh); self.tm.start(2000)
+
+    def _mq_build(self, v):
+        """V0.6.35 📋 多步搬移（手機同一個）：① A 選的資料夾 → C ② A 剩下 → B ③ B 原本的 → A ④ 對調代號."""
+        g = QGroupBox('📋 多步搬移（照順序一步一步搬，空間不夠先停；搬的時候這幾顆冷凍：只能看不能改）'); g.setStyleSheet('QGroupBox{border:2px solid #2f9bff}')
+        gv = QVBoxLayout(g); v.insertWidget(1, g); self._mq_sig = ''
+        r = QHBoxLayout(); gv.addLayout(r); self.mqX = QComboBox(); self.mqY = QComboBox(); self.mqZ = QComboBox()
+        for nm, cb, d in (('A（先清空）', self.mqX, 'D'), ('B（A 剩下的搬來、原本的搬去 A）', self.mqY, 'H'), ('C（A 選的資料夾先搬來）', self.mqZ, 'G')):
+            r.addWidget(QLabel(nm)); r.addWidget(cb); cb.setProperty('def', d)
+        b = QPushButton('🔍 讀 A 的資料夾大小'); r.addWidget(b); r.addStretch(1); b.clicked.connect(lambda: self._mq('mq_scan'))
+        gv.addWidget(QLabel('① A 選的資料夾 → C　② A 剩下的 → B　③ B 原本的 → A　④ 到磁碟管理對調 A／B 代號（SortCut 用序號認得，紀錄都在）'))
+        self.mq_tree = QTreeWidget(); self.mq_tree.setHeaderLabels(['A 上的資料夾（勾＝① 先搬到 C）', '大小', '檔案數']); self.mq_tree.setMinimumHeight(180); gv.addWidget(self.mq_tree)
+        self.mq_tree.setColumnWidth(0, 420)
+        self.mq_info = QLabel(''); self.mq_info.setWordWrap(True); self.mq_info.setTextFormat(Qt.RichText); gv.addWidget(self.mq_info)
+        r2 = QHBoxLayout(); gv.addLayout(r2); self.mq_b = {}
+        for k, t in (('mq_create', '✅ 檢查空間、記下 B 原本的檔'), ('mq_go', '🚚 開始／▶ 繼續'), ('mq_pause', '⏸ 暫停'), ('mq_swapped', '✔ 代號換好了'), ('mq_cancel', '✖ 取消計畫')):
+            bb = QPushButton(t); r2.addWidget(bb); self.mq_b[k] = bb; bb.clicked.connect(lambda _c=False, k=k: self._mq(k))
+        r2.addStretch(1)
+
+    def _mq_only(self):
+        out = []
+        for i in range(self.mq_tree.topLevelItemCount()):
+            it = self.mq_tree.topLevelItem(i)
+            if it.checkState(0) == Qt.Checked: out.append(it.data(0, Qt.UserRole)); continue
+            for k in range(it.childCount()):
+                c = it.child(k)
+                if c.checkState(0) == Qt.Checked: out.append(c.data(0, Qt.UserRole))
+        return [x for x in out if x]
+
+    def _mq(self, a):
+        X, Y, Z = (cb.currentData() for cb in (self.mqX, self.mqY, self.mqZ))
+        if a == 'mq_scan': return bg(lambda: self.o().mq_scan(X), lambda r: self.win.msg('📋 ' + r.get('message', '')))
+        if a == 'mq_create':
+            only = self._mq_only()
+            if not only: QMessageBox.information(self, '📋 多步搬移', f'先勾 {X}: 上要先搬到 {Z}: 的資料夾'); return
+            return bg(lambda: self.o().mq_create(X, Y, Z, only), lambda r: self.win.msg('📋 ' + r.get('message', '')))
+        if a == 'mq_go':
+            if QMessageBox.question(self, '📋 多步搬移', '確定開始搬？\n\n• 先停好轉檔／H265（手上的停下、放回排隊），確認沒有在動才開始\n• 搬的時候這幾顆冷凍：SortCut、整理、H265 只能看不能改\n• 一步做完自動接下一步') != QMessageBox.Yes: return
+            return bg(lambda: self.o().mq_go(), lambda r: self.win.msg('📋 ' + r.get('message', '')))
+        if a == 'mq_cancel' and QMessageBox.question(self, '📋 多步搬移', '取消這個計畫？（已經搬好的不會變回去）') != QMessageBox.Yes: return
+        bg(lambda: self.o().mq_ctl(a[3:]), lambda r: self.win.msg('📋 ' + r.get('message', '')))
+
+    def _mq_show(self, j):
+        D = j.get('drives') or []; Q = j.get('mq') or {}; M = j.get('mqs') or {}; FZ = j.get('freeze') or {}; st = Q.get('state') or ''
+        ks = ','.join(d['X'] for d in D)
+        if ks != getattr(self, '_mq_ks', ''):
+            self._mq_ks = ks
+            for cb in (self.mqX, self.mqY, self.mqZ):
+                cur = cb.currentData() or Q.get({'D': 'X', 'H': 'Y', 'G': 'Z'}.get(cb.property('def'), ''), '') or cb.property('def'); cb.blockSignals(True); cb.clear()
+                for d in D: cb.addItem(f"{d['X']}:{(' ' + d['label']) if d.get('label') else ''}　{core.fmt_b(d['used'])}／{core.fmt_b(d['total'])}", d['X'])
+                i = cb.findData(cur); cb.setCurrentIndex(max(0, i)); cb.blockSignals(False)
+        sig = f"{M.get('X')}{M.get('t')}{len(M.get('tops') or [])}"
+        if sig != self._mq_sig and (M.get('tops') or []):
+            self._mq_sig = sig; self.mq_tree.clear()
+            for t in M['tops']:
+                if t['rel'] == '（根目錄的檔）': continue
+                it = QTreeWidgetItem([f"📁 {t['rel']}", core.fmt_b(t['b']), f"{t['n']:,}"]); it.setData(0, Qt.UserRole, t['rel']); it.setCheckState(0, Qt.Unchecked)
+                it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+                for k in t.get('kids') or []:
+                    c = QTreeWidgetItem([k['rel'], core.fmt_b(k['b']), f"{k['n']:,}"]); c.setData(0, Qt.UserRole, k['rel']); c.setCheckState(0, Qt.Unchecked); it.addChild(c)
+                self.mq_tree.addTopLevelItem(it)
+        h = []
+        if FZ.get('on'): h.append(f"<b style='color:#4dc9ff'>🧊 {' '.join(x + ':' for x in FZ.get('letters') or [])} 冷凍中</b>（SortCut、整理、H265 只能看不能改；搬完或暫停就解凍）")
+        if j.get('waiting') or j.get('pmsg'): h.append('⏳ ' + _html.escape(j.get('pmsg') or '等轉檔／H265 停好…'))
+        if M.get('msg'): h.append(_html.escape(M['msg']))
+        if Q.get('X'):
+            s_ = Q.get('s') or [0, 0, 0]
+            for i, x in enumerate(Q.get('steps') or []):
+                dn = next((d for d in Q.get('done') or [] if d['i'] == i), None); cur = i == int(Q.get('i') or 0) and st == 'run'
+                h.append(f"{'✔' if dn else '▶' if cur else '○'} <b>{_html.escape(x['title'])}</b>" + (f'　{core.fmt_b(s_[i])}' if i < 3 else '') + (f"　搬好 {dn['n']:,} 個" + (f"・沒搬成 {dn['fail']}" if dn.get('fail') else '') if dn else ''))
+            if Q.get('collide_n'): h.append(f"⚠ {Q['collide_n']} 個同路徑同名（搬到 {Q['Y']}: 時自動加 (2)）")
+            for p_ in Q.get('problems') or []: h.append(f"<span style='color:#ff6b6b'>✖ {_html.escape(p_)}</span>")
+            if Q.get('notice'): h.append(f"<b style='color:#3fb37f'>{_html.escape(Q['notice'])}</b>")
+            if Q.get('msg'): h.append(_html.escape(Q['msg']))
+        self.mq_info.setText('<br>'.join(h))
+        en = {'mq_create': st in ('', 'bad', 'done'), 'mq_go': st in ('ready', 'stopped'), 'mq_pause': st == 'run', 'mq_swapped': st == 'swap', 'mq_cancel': bool(Q) and st != 'run'}
+        for k, b_ in self.mq_b.items(): b_.setEnabled(en.get(k, False))
 
     def o(self):
         import vs_rsplit as RS
@@ -4570,6 +4654,8 @@ class RSplitPage(QWidget):
 
     def _show(self, j):
         self._busy = False
+        try: self._mq_show(j)
+        except Exception: ENG.log.err('📋 多步搬移畫面')
         try:
             st = j.get('state') or ''; self._state = st; P = j.get('plan') or {}; self._P = P; self._vols = j.get('vols') or []; T = list(P.get('tgts') or []); busy = st in ('run', 'pause')
             self.g.setEnabled(not busy and st != 'done'); self.b_plan.setEnabled(not busy and st != 'done')

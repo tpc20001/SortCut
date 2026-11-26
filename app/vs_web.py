@@ -598,6 +598,10 @@ class WebServer:
             try:
                 if a == 'speed': r = o.set_pace(d)
                 elif a == 'plan': r = o.plan(d.get('src') or 'R', [d.get('t1'), d.get('t2')], d.get('mode') or 'auto')
+                elif a == 'mq_scan': r = o.mq_scan(d.get('X'))                                       # V0.6.35 📋 多步搬移
+                elif a == 'mq_create': r = o.mq_create(d.get('X'), d.get('Y'), d.get('Z'), d.get('only') or [])
+                elif a == 'mq_go': r = o.mq_go()
+                elif a.startswith('mq_'): r = o.mq_ctl(a[3:])
                 else: r = o.ctl(a, d.get('map') if a == 'remap' else None)
             except Exception as ex: E.log.err('🚚 R 碟搬移'); r = {'ok': False, 'message': f'出錯：{ex}'}
             E.log.w(f'🚚 手機／網頁按了 R 碟搬移：{a} → {r.get("message", "") or ("OK" if r.get("ok") else "")}')
@@ -1124,7 +1128,8 @@ class WebServer:
             kind = 'trash' if (g == 'F' and E.cfg.get('arch_f_trash')) else f'grade:{g}'
             n = E.archive_many(ids, kind); self._pc_reload(); return jresp({'ok': n > 0, 'message': f'已排入歸檔 {n:,} 部（後台看進度；📒 操作紀錄有每一筆，可以搬回）'})
         if a == 'trash_purge':
-            r = E.trash_purge(dry=False); self._pc_reload(); return jresp(r)
+            w_ = str(d.get('del') or '')                                         # V0.6.35 ''＝只有待刪、with＝連 DELETE、only＝只有 DELETE
+            r = E.trash_purge(dry=False, incl_del=(w_ == 'with'), only_del=(w_ == 'only')); self._pc_reload(); return jresp(r)
         if a == 'restore_db':
             r = E.request_restore(s('name'))
             if r.get('ok'): r['message'] = f'已排定：下次打開程式時用這份備份還原（{r.get("n", 0):,} 部影片；現在的資料庫會改名留著）'
