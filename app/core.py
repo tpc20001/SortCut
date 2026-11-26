@@ -4938,9 +4938,59 @@ class Engine:
                 if J.get('proc'): J['proc'].kill()
         return self.db.xm('UPDATE files SET cv_state=CASE WHEN cv_redo=1 THEN 3 ELSE 5 END, cv_redo=0 WHERE id=? AND cv_state=1', [(int(i),) for i in ids]) or 0
 
+    def _conv_watchdog(self):
+        """V0.6.38 ⏭ 管所有在轉的（連舊版開的、熱更新前就卡住的也管）：
+        進度／階段 10 分鐘沒變（收尾階段 30 分鐘）、或慢到不到其他的 15% 而且還要 2 小時以上 → 停掉、放到「失敗」（可以重試）；
+        停不下來（舊的執行緒卡死）→ 60 秒後直接從「轉檔中」拿掉，空出位子給下一部."""
+        if self.cfg.get('cv_autoskip') is False: return
+        now = time.time(); stuck = float(self.cfg.get('cv_stuck_min') or 10) * 60
+        SK = self.__dict__.setdefault('_cv_skipped', {})                         # 跳過的：舊的執行緒停下來時可能把它放回排隊 → 再改回「失敗」
+        for fid, (why_, t_) in list(SK.items()):
+            if fid in self.cv_active: continue
+            if now - t_ > 1800: SK.pop(fid, None); continue
+            try:
+                if self.db.x("UPDATE files SET cv_state=4, cv_err=? WHERE id=? AND cv_state IN (1,2)", (f'⏭ 自動跳過：{why_}', int(fid))): pass
+            except Exception: pass
+        AJ = list(self.cv_active.items()); rates = {}
+        for fid, J in AJ:
+            try:
+                el = now - float(J.get('t0') or now); pct = float(J.get('pct') or 0)
+                if el > 120 and 0 < pct < 100: rates[fid] = pct / el
+            except Exception: pass
+        for fid, J in AJ:
+            try:
+                sig = (round(float(J.get('pct') or 0), 1), J.get('phase'), str(J.get('enc') or '')[:40], int(J.get('done_b') or 0))
+                wd = J.get('_wd')
+                if not wd or wd[0] != sig: J['_wd'] = (sig, now); wd = J['_wd']
+                if J.get('_skip_t'):                                            # 已經叫它停了：60 秒還在 → 直接拿掉
+                    if now - J['_skip_t'] > 60 and self.cv_active.get(fid) is J:
+                        self.cv_active.pop(fid, None); J['zombie'] = True
+                        self.db.x('UPDATE files SET cv_state=4, cv_err=? WHERE id=?', (f'⏭ 自動跳過：{J.get("autoskip", "卡住")}（停不下來，直接拿掉）', int(fid)))
+                        self.log.w(f'⏭ 自動跳過：{J.get("name")} 停不下來 → 直接從「轉檔中」拿掉、放到「失敗」（可以重試）')
+                    continue
+                lim = stuck * (3 if J.get('phase') in ('finish', 'post', 'check') else 1)
+                why = ''
+                if now - wd[1] > lim: why = f'{lim / 60:.0f} 分鐘沒有前進（停在 {sig[0]}%）'
+                elif fid in rates and len(rates) >= 2 and now - float(J.get('t0') or now) > 15 * 60:
+                    oth = sorted(v for k, v in rates.items() if k != fid); med = oth[len(oth) // 2]
+                    left = (100 - sig[0]) / max(rates[fid], 1e-9)
+                    if rates[fid] < med * float(self.cfg.get('cv_slow_x') or 0.15) and left > 2 * 3600:
+                        why = f'比其他正在轉的慢太多（照這樣還要 {fmt_t(left)}）'
+                if not why: continue
+                J['autoskip'] = why; J['cancel'] = True; J['_skip_t'] = now; SK[int(fid)] = (why, now)
+                self.log.w(f'⏭ 自動跳過：{J.get("name")}：{why} → 停掉、放到「失敗」（原檔不動，可以重試）')
+                P = J.get('proc')
+                for m in ('kill', 'terminate'):
+                    try: getattr(P, m)(); break
+                    except Exception: pass
+            except Exception: self.log.err('⏭ 自動跳過')
+
     def _conv_boss(self):
+        t_wd = 0.0
         while self.alive():
             try:
+                if time.time() - t_wd > 15:
+                    t_wd = time.time(); self._conv_watchdog()
                 n = self.bg_cap('conv', max(1, min(8, int(self.cfg.get('cv_n') or 3))))
                 AJ = list(self.cv_active.values()); fin_n = sum(1 for J_ in AJ if J_.get('phase') in ('finish', 'post'))
                 busy_n = len(AJ) - fin_n                                        # V0.1.93 收尾中的（顯示卡已經空了）不佔「同時幾部」；收尾的也滿 N 部就先等它們做完
@@ -4949,6 +4999,7 @@ class Engine:
                     excl = ','.join(str(int(x)) for x in self.cv_active) or '-1'
                     hl = getattr(self, 'lane_hold', None) or {}
                     off = [r_ for r_ in {str(x) for x in self.cfg.get('roots') or []} if self.root_offline(r_) or (hl.get(self.root_lane(r_)) or (0,))[0] > time.time()]; ph = ','.join('?' * len(off))
+                    excl = ','.join(str(int(x)) for x in list(self.cv_active) + list((getattr(self, '_cv_skipped', None) or {}).keys())) or '-1'
                     R_ = self.db.q(f'SELECT * FROM files WHERE cv_state=1 AND missing=0 AND id NOT IN ({excl}) {"AND root NOT IN (" + ph + ")" if off else ""} ORDER BY cv_q LIMIT 60', off)
                     r = None; per = max(1, int(self.cfg.get('cv_per_disk') or 1))
                     act = {}
