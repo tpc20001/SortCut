@@ -149,7 +149,7 @@ document.addEventListener('click',e=>{if(e.target.closest('#lvb')){e.preventDefa
 const DZC=['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#e66767'],DZG='#5b6573';
 const dzE=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const dzN=n=>Math.round(+n||0).toLocaleString();
-const dzB=b=>{b=+b||0;if(b>=1e12)return (b/1e12).toFixed(2)+' TB';if(b>=1e9)return (b/1e9).toFixed(1)+' GB';if(b>=1e6)return (b/1e6).toFixed(0)+' MB';return (b/1e3).toFixed(0)+' KB'};
+const dzB=b=>{b=+b||0;if(!b)return '0';if(b>=1e12)return (b/1e12).toFixed(2)+' TB';if(b>=1e9)return (b/1e9).toFixed(1)+' GB';if(b>=1e6)return (b/1e6).toFixed(0)+' MB';return (b/1e3).toFixed(0)+' KB'};
 const dzP=(a,b)=>b?Math.round(a*1000/b)/10:0;
 const MSW=[['vs','🎬','VideoSift','10 秒剪輯、分級'],['fc','🗂','FileCompare','16 格分類整理'],['h265','🗜','H265','SSIM 轉檔瘦身']];
 function mswHTML(m){return `<div class="msw" id="msw" data-m="${m}" role="tablist" aria-label="切換"><i class="msw-k"></i>${MSW.map(([k,ic,n,s])=>`<button type="button" role="tab" data-m="${k}" class="${k===m?'on':''}" title="${n}：${s}"><b>${ic}</b><span>${n}</span></button>`).join('')}</div>`}

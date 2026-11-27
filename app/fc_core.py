@@ -183,7 +183,8 @@ class Settings:
         if old == v: return
         if self.log and k not in self.QUIET:
             sv = lambda x: (json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else repr(x))[:300]
-            self.log.w(f'設定：{k}　{sv(old)} → {sv(v)}')
+            if any(x in k.lower() for x in ('pin', 'tok', 'salt', 'pass', 'secret')): self.log.w(f'設定：{k}　（已更改，內容不記）')   # V0.6.66 密碼／登入碼不寫進 LOG
+            else: self.log.w(f'設定：{k}　{sv(old)} → {sv(v)}')
         with self.lock:
             self.d[k] = v; self.path.parent.mkdir(parents=True, exist_ok=True); tmp = self.path.with_suffix('.tmp')
             tmp.write_text(json.dumps(self.d, ensure_ascii=False, indent=1), encoding='utf-8'); os.replace(str(tmp), str(self.path))
@@ -447,6 +448,14 @@ class Engine:
     def __init__(self, root, adopt=None, start=True, version=''):
         self.root = Path(root); self.data = self.root / 'Data'; self.data.mkdir(parents=True, exist_ok=True); self.version = version
         self.log = _keep(adopt, 'log', lambda: Log(self.root / 'LOG')); self.cfg = Settings(self.data / 'settings.json'); self.cfg.log = self.log
+        if not self.cfg.get('log_scrub_v66'):                                    # V0.6.66 舊 LOG 裡的登入碼換成「已更改」（一次、背景）
+            def _scrub(d=self.root / 'LOG', lk=getattr(self.log, 'lock', None)):
+                try:
+                    import core as _c
+                    L_ = _c.Log.__new__(_c.Log); L_.d = Path(d); L_.lock = lk or threading.Lock(); L_.tail = []
+                    _c.Log.scrub(L_); self.cfg.set('log_scrub_v66', True)
+                except Exception: pass
+            threading.Thread(target=_scrub, name='FcLogScrub', daemon=True).start()
         self.db = Store(self.data / 'app.sqlite3') if adopt is None else adopt.db
         if adopt is not None and type(self.db) is not Store and type(self.db).__name__ == 'Store':
             try: self.db.__class__ = Store                                      # V0.5.92 熱更新接手的舊連線也用新的「畫面不等資料庫」

@@ -172,6 +172,30 @@ class Log:
                 with open(p, 'a', encoding='utf-8') as fh: fh.write(line + '\n')
             except Exception: pass
 
+    SCRUB_RE = re.compile(r'(設定：\S*(?:pin|tok|salt|pass|secret)\S*)\u3000(?!（已更改).*$', re.I | re.M)
+
+    def scrub(self):
+        """V0.6.66 舊 LOG 裡寫過的 PIN 雜湊、登入碼（之前改設定會整串寫進去）→ 換成「已更改」。只做一次、背景跑."""
+        n = 0
+        for p in sorted(self.d.glob('*.txt')):
+            try:
+                if p.stat().st_size > 60e6: continue
+                cur = p.name in ('app_log.txt',) or not re.search(r'_2\d{7}_\d{6}', p.stem)
+                lk = self.lock if cur else None
+                if lk: lk.acquire()
+                try:
+                    t = p.read_text(encoding='utf-8', errors='replace')
+                    t2, k = self.SCRUB_RE.subn(lambda m: m.group(1) + '\u3000（已更改，內容不記）', t)
+                    if k:
+                        tmp = p.with_suffix('.scrub'); tmp.write_text(t2, encoding='utf-8'); os.replace(str(tmp), str(p)); n += k
+                finally:
+                    if lk: lk.release()
+            except Exception: pass
+        try:
+            L = [self.SCRUB_RE.sub(lambda m: m.group(1) + '\u3000（已更改，內容不記）', x) for x in list(self.tail)]; self.tail.clear(); self.tail.extend(L)
+        except Exception: pass
+        return n
+
     def raw(self, line, f):
         """不加時間前綴（給 .jsonl：一行一筆 JSON，方便別的程式讀）."""
         with self.lock:
@@ -212,8 +236,8 @@ class Settings:
     QUIET = {'perf_pos', 'perf_float', 'last_page', 'last_file', 'nav_seen', 'nav_shut5', 'side_w', 'card_w', 'grid_cols', 'list_view', 'ex_sort', 'cmp_layout',   # V0.6.65 畫面位置、最近用過、計數這類不寫 LOG（之前每換一頁就一行）
              'recent_dirs', 'recent_vol', 'search_hist', 'tq_hist', 'ver_seen', 'week_seen', 'lab_seen', 'player_keys_seen', 'tour_seen', 'mf_lag_ms', 'bg_last', 'hs_boost_until',
              'guess_stat', 'share_t', 'pack_t', 'cv_cap_t', 'rule_last', 'auto_rule_log', 'daily_goal_hit', 'cover_stats', 'up_ac_day', 'shrink_hist', 'free_hist', 'sprint_hist',
-             'copy_q', 'cloud_upd', 'mvq', 'web_tok_meta'}
-    SECRET = ('pin', 'tok', 'salt', 'hash', 'pass', 'key')                         # V0.6.65 密碼、登入碼不寫進 LOG（只寫「改了」）
+             'copy_q', 'cloud_upd', 'mvq', 'web_tok_meta', 'log_scrub_v66'}
+    SECRET = ('pin', 'tok', 'salt', 'pass', 'secret')                         # V0.6.65 密碼、登入碼不寫進 LOG（只寫「改了」）
 
     def set(self, k, v):
         old = self.d.get(k, DEFAULTS.get(k))
@@ -221,7 +245,7 @@ class Settings:
         lg = getattr(self, 'log', None)
         if lg and k not in self.QUIET:
             sv = lambda x: (json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else repr(x))[:300]
-            if any(x in k.lower() for x in self.SECRET) and k not in ('player_keys', 'brt_k', 'cv_trial_k'): lg.w(f'設定：{k}　（已更改，內容不記）')
+            if any(x in k.lower() for x in self.SECRET): lg.w(f'設定：{k}　（已更改，內容不記）')
             else: lg.w(f'設定：{k}　{sv(old)} → {sv(v)}')
         with self.lock:
             self.d[k] = v; self.path.parent.mkdir(parents=True, exist_ok=True); tmp = self.path.with_suffix('.tmp')
@@ -786,6 +810,13 @@ class Engine:
     def __init__(self, root, adopt=None, start=True, version=''):
         self.root = Path(root); self.data = self.root / 'Data'; self.data.mkdir(parents=True, exist_ok=True); self.version = version
         self.log = Log(self.root / 'LOG'); self.cfg = Settings(self.data / 'settings.json'); self.cfg.log = self.log
+        if not self.cfg.get('log_scrub_v66'):                                    # V0.6.66 舊 LOG 裡的登入碼清掉（一次）
+            def _scrub():
+                try:
+                    k = self.log.scrub(); self.cfg.set('log_scrub_v66', True)
+                    if k: self.log.w(f'🔒 舊 LOG 裡 {k} 行登入碼／PIN 雜湊已換成「已更改」')
+                except Exception: pass
+            threading.Thread(target=_scrub, name='VsLogScrub', daemon=True).start()
         if not self.cfg.get('cv_v2'):                                         # V0.1.53：轉好之後原檔預設搬到 X:\DELETE\（原本預設「留著不動」的換掉；自己選過搬去備份／回收筒的不動）
             if (self.cfg.get('cv_after') or 'keep') == 'keep': self.cfg.set('cv_after', 'delete_dir')
             self.cfg.set('cv_v2', True)
