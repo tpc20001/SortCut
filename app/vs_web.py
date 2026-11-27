@@ -605,6 +605,10 @@ class WebServer:
         """V0.5.85 🚚 R 碟清空搬移：GET 看進度；POST {a: plan|start|pause|resume|reset, src, t1, t2}."""
         import vs_rsplit as RS
         E = self.E(); o = RS.get(E)
+        if req.method == 'GET' and req.q('lite'):                               # V0.6.52 每一頁的小通知用（很輕）
+            Q = o.mq() or {}
+            P = o.meta('plan') or {} if Q.get('state') == 'run' else {}
+            return jresp({'ok': True, 'mq': {k: Q.get(k) for k in ('state', 'notice', 'msg', 'i')}, 'step': P.get('step', ''), 'st': o.state() if Q else ''})
         if req.method != 'GET':
             if self.is_ro(req): return jresp({'ok': False, 'message': '👀 這支手機是唯讀登入：只能看，不能改'})
             d = req.json() or {}; a = d.get('a', '')

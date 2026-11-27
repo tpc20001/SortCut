@@ -1399,6 +1399,13 @@ async function updBanner(){try{const j=await api('/api/cloud_upd',undefined,{qui
   el.innerHTML=`<span style="flex:1">☁ 有新版 <b>V${esc(nv)}</b>${(I.notes||[])[0]?` <span class="mu">${esc(String(I.notes[0]).slice(0,40))}…</span>`:''}</span><button class="pill acc" id="updGo">⬇ 更新</button><button class="pill" id="updNo" title="這版先不要">✕</button>`;
   $('#updGo').onclick=async()=>{$('#updGo').disabled=true;const x=await api('/api/cloud_upd',{a:'go'});toast(x.message||'',6000);el.remove()};$('#updNo').onclick=()=>{LS.set('updSkip',nv);el.remove()}}catch(e){}}
 setTimeout(updBanner,4000);setInterval(updBanner,10*60*1000);
+// V0.6.52 📋 多步搬移的重要通知（例：① 搬完可以開 FusionStitch、④ 要對調代號）每一頁最上面都看得到
+async function mqBanner(){try{const j=await api(U('/api/rsplit',{lite:1}),undefined,{quiet:true});const Q=j.mq||{};let el=$('#mqBan');
+  const txt=Q.notice||(Q.state==='swap'?'✅ 搬完了！到「🚚 多步搬硬碟」看最後一步（對調代號）':'')||(Q.state==='stopped'&&Q.msg?'⏸ 多步搬移停下來了：'+Q.msg:'');
+  if(!txt){if(el)el.remove();return}if(!el){const v_=$('#v');if(!v_)return;el=document.createElement('div');el.id='mqBan';el.style.cssText='display:flex;gap:8px;align-items:center;padding:8px 12px;margin:8px 12px 0;background:#12283a;border:1px solid #2f9bff;border-radius:12px;font-size:14px';v_.parentNode.insertBefore(el,v_)}
+  el.innerHTML=`<span style="flex:1">📋 ${esc(txt)}</span><button class="pill" id="mqbGo">看</button>${Q.notice?'<button class="pill" id="mqbOk">知道了</button>':''}`;
+  $('#mqbGo').onclick=()=>location.hash='tool/rsplit';const ok=$('#mqbOk');if(ok)ok.onclick=async()=>{await api('/api/rsplit',{a:'mq_notice_ok'});el.remove()}}catch(e){}}
+setTimeout(mqBanner,5000);setInterval(mqBanner,60*1000);
 async function tConv(){LS.set('cv',CV);
   $('#tb').innerHTML=`<div id="cvg"></div><div class="seg" id="cvtab" style="margin-bottom:8px;width:100%">${[['pick','➕ 選檔'],['run','⚙ 轉檔中'],['done','✔ 完成'],['fail','✖ 失敗']].map(([k,n])=>`<button data-k="${k}" style="flex:1"${CV.tab===k?' class="on"':''}>${n}</button>`).join('')}</div><div id="cvb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;
   $('#cvtab').onclick=e=>{const b=e.target.closest('button');if(!b)return;CV.tab=b.dataset.k;CVSEL.clear();tConv()};

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.51'
+APP_VERSION = '0.6.52'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -9196,6 +9196,7 @@ class Main(QMainWindow):
         for b_ in (self.b_perf, self.b_bg, self.b_hide, self.b_cover): b_.setObjectName('pill'); top.addWidget(b_)
         self.lv = LvBadge(); self.lv.clicked.connect(self.open_yield); top.addWidget(self.lv)            # V0.5.71 🤝 右上角 Lv 1～10（讓路給 TikLive）
         self._lv_t = QTimer(self); self._lv_t.timeout.connect(self._lv_tick); self._lv_t.start(2000)
+        self._rm_last = getattr(ENG, 'remap_msg', ''); self._rm_t = QTimer(self); self._rm_t.timeout.connect(self._rm_tick); self._rm_t.start(10000)   # V0.6.52 搬硬碟這類重要通知，跑的時候也跳出來
         self.b_cover.clicked.connect(self.show_cover)
         self.b_jobs.clicked.connect(self.open_jobs)
         self.stack = QStackedWidget(); cv_.addWidget(self.stack, 1)
@@ -10110,6 +10111,12 @@ class Main(QMainWindow):
         ENG.last_user = self.last_act                                           # 給 🧪 背景加速判斷「電腦閒置」
         m = int(ENG.cfg.get('cover_idle_min') or 0)
         if m and self.outer.currentIndex() == 1 and time.time() - self.last_act > m * 60: self.show_cover(); ENG.log.w(f'閒置 {m} 分鐘，自動回到封面')
+
+    def _rm_tick(self):
+        try:
+            m_ = getattr(ENG, 'remap_msg', '') or ''
+            if m_ and m_ != self._rm_last: self._rm_last = m_; self.msg('💽 ' + m_, 30000)
+        except Exception: pass
 
     def _page(self, i):
         i = int(i)
