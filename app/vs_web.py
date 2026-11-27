@@ -674,8 +674,10 @@ class WebServer:
         if folder and off == 0:
             try: E.recent_push(folder)                                          # V0.2.56 🕘 最近開過的資料夾
             except Exception: pass
-        R = E.list_files(folder, sub, sort, flt, search, req.q('dur', '') if (E.cfg.get('lab') or {}).get('dur_chips') else '', req.q('res', '') if (E.cfg.get('lab') or {}).get('res_chips') else '')
-        rows = [{k: r.get(k) for k in self.LIST_COLS} for r in R[off:off + lim]]
+        _d, _r = (req.q('dur', '') if (E.cfg.get('lab') or {}).get('dur_chips') else ''), (req.q('res', '') if (E.cfg.get('lab') or {}).get('res_chips') else '')
+        if hasattr(E, 'list_page'): total, R = E.list_page(folder, sub, sort, flt, search, _d, _r, off, lim)   # V0.6.63 只撈這一頁
+        else: R = E.list_files(folder, sub, sort, flt, search, _d, _r); total = len(R); R = R[off:off + lim]
+        rows = [{k: r.get(k) for k in self.LIST_COLS} for r in R]
         if rows:                                                                # 👤 卡片上顯示出現的人（取了名字的）
             ppl = {}
             for fid, nm, n in E.db.q(f"SELECT file_id, name, n FROM people WHERE length(name)>0 AND file_id IN ({','.join(str(int(r['id'])) for r in rows)}) ORDER BY n DESC"):
@@ -684,7 +686,7 @@ class WebServer:
             CP = E.cut_pending() if hasattr(E, 'cut_pending') else {}             # V0.2.02 剪輯中幾段（卡片「-剪輯 N」）
             for r in rows: r['cut_pend'] = CP.get(r['id'], 0)
         hid = E.hidden_count(folder, sub) if not str(flt).startswith('ext:') and off == 0 else []
-        return jresp({'ok': True, 'total': len(R), 'off': off, 'rows': rows, 'chips': E.grade_summary(folder, sub), 'hidden': hid})
+        return jresp({'ok': True, 'total': total, 'off': off, 'rows': rows, 'chips': E.grade_summary(folder, sub) if off == 0 else {}, 'hidden': hid})
 
     def api_file(self, req):
         E = self.E(); fid = int(req.q('id', '0') or 0); f = E.file(fid)

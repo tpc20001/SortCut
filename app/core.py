@@ -7433,7 +7433,21 @@ class Engine:
                         '★' if r.get('fav') else '', r.get('cut_n') or 0, '✔' if r.get('viewed') else '', r.get('tag') or '', (r.get('note') or '').replace('\n', ' '), r.get('path') or ''])
         return '\ufeff' + b.getvalue()
 
+    LF_COLS = 'id,path,folder,name,ext,size,dur,w,h,vcodec,th_state,th_n,th_dir,th_cols,th_rows,th_step,viewed,fav,grade,cut_n,probed,has_v,tag,note,card_k,mtime,still,up_t,pub_t'
+
     def list_files(self, folder, sub=True, sort='name', flt='all', search='', dur='', res=''):
+        w, a, order = self._lf_where(folder, sub, sort, flt, search, dur, res)
+        return [dict(r) for r in self.db.q(f'SELECT {self.LF_COLS} FROM files WHERE {" AND ".join(w)} ORDER BY {order} LIMIT 20000', a)]
+
+    def list_page(self, folder, sub=True, sort='name', flt='all', search='', dur='', res='', off=0, lim=120):
+        """V0.6.63 手機一頁一頁拿：只撈這一頁（之前每一頁都撈 2 萬筆再切），總數另外數."""
+        w, a, order = self._lf_where(folder, sub, sort, flt, search, dur, res); W = " AND ".join(w)
+        off = max(0, min(int(off), 20000)); lim = max(0, min(int(lim), 20000 - off))
+        n = (self.db.one(f'SELECT COUNT(*) FROM files WHERE {W}', a) or [0])[0] or 0
+        rows = [dict(r) for r in self.db.q(f'SELECT {self.LF_COLS} FROM files WHERE {W} ORDER BY {order} LIMIT ? OFFSET ?', list(a) + [lim, off])] if lim and off < n else []
+        return min(n, 20000), rows
+
+    def _lf_where(self, folder, sub=True, sort='name', flt='all', search='', dur='', res=''):
         w = ['missing=0']; a = []
         dw_ = DUR_BINS.get(str(dur or ''))                                       # V0.2.37 ⏱ 時長篩選
         if dw_: w.append(dw_)
@@ -7478,7 +7492,7 @@ class Engine:
             elif (self.cfg.get('lab') or {}).get('note_presets'): w.append('(name LIKE ? OR note LIKE ?)'); a += [f'%{search}%', f'%{search}%']   # V0.2.83 也找備註
             else: w.append('name LIKE ?'); a.append(f'%{search}%')
         order = {'up_t': 'up_t DESC, folder, name', 'still': 'still DESC, folder, name', 'name': 'folder,name', 'size': 'size DESC', 'size_asc': 'size ASC', 'dur': 'dur DESC', 'dur_asc': 'dur ASC', 'mtime': 'mtime DESC', 'viewed': 'viewed DESC, folder, name', 'added': 'id DESC', 'grade': "CASE grade WHEN 'S' THEN 0 WHEN 'A' THEN 1 WHEN 'E' THEN 2 WHEN 'F' THEN 3 ELSE 4 END, folder, name"}.get(sort, 'folder,name')
-        return [dict(r) for r in self.db.q(f'SELECT id,path,folder,name,ext,size,dur,w,h,vcodec,th_state,th_n,th_dir,th_cols,th_rows,th_step,viewed,fav,grade,cut_n,probed,has_v,tag,note,card_k,mtime,still,up_t,pub_t FROM files WHERE {" AND ".join(w)} ORDER BY {order} LIMIT 20000', a)]
+        return w, a, order + ', id'                                            # 一樣的排在一起時順序固定（分頁不會跳號）
 
     def file(self, fid):
         r = self.db.one('SELECT * FROM files WHERE id=?', (int(fid),)); return dict(r) if r else None
