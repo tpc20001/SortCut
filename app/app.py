@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.57'
+APP_VERSION = '0.6.58'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -5224,7 +5224,7 @@ class SetPage(QWidget):
                                 '也可以在檔案總管左邊的資料夾上按右鍵 →「🚫 排除這個資料夾」。'))
         e1.clicked.connect(self._ex_add_dir); e2.clicked.connect(lambda: (exclude_name(self.win, self.ex_nm.text()), self.ex_nm.clear()))
         self.ex_nm.returnPressed.connect(lambda: (exclude_name(self.win, self.ex_nm.text()), self.ex_nm.clear())); e3.clicked.connect(self._ex_del)
-        g = QGroupBox('🖱 滑鼠滾輪（檔案總管、清單、每一頁都一樣）'); f = QFormLayout(g); v.addWidget(g)      # V0.6.34
+        g = QGroupBox('🖱 滑鼠滾輪・介面簡化'); f = QFormLayout(g); v.addWidget(g)      # V0.6.34
         self.wh_m = QComboBox()
         for x_ in WheelBoost.STEPS: self.wh_m.addItem(f'×{x_:g}' + ('（原本的速度）' if x_ == 1 else '（慢一點）' if x_ < 1 else ''), x_)
         self.wh_m.setCurrentIndex(max(0, WheelBoost.STEPS.index(WheelBoost.mult()) if WheelBoost.mult() in WheelBoost.STEPS else 2))
@@ -5234,6 +5234,8 @@ class SetPage(QWidget):
         f.addRow('捲動速度', self.wh_m); f.addRow(self.wh_s)
         self.c_shz = QCheckBox('左邊選單顯示 HotZone 的項目（這台沒設定過 HotZone 時預設藏起來）'); self.c_shz.setChecked(ENG.cfg.get('nav_show_hz') is True)   # V0.6.47
         self.c_shz.toggled.connect(lambda on: (ENG.cfg.set('nav_show_hz', bool(on)), self.win.nav.apply_collapse())); f.addRow(self.c_shz)
+        self.c_nas = QCheckBox('左邊選單：14 天沒點過的分組自動收起來（點標題就打開）'); self.c_nas.setChecked(ENG.cfg.get('nav_auto_shut') is not False)   # V0.6.58
+        self.c_nas.toggled.connect(lambda on: (ENG.cfg.set('nav_auto_shut', bool(on)), self.win.nav.apply_collapse())); f.addRow(self.c_nas)
         f.addRow(self._note('Ctrl＋滾輪（一列幾張）、Alt＋滾輪、時間軸、音量這些自己的滾輪功能照舊。手機網頁的電腦版（瀏覽器）在右下角另外調。'))
         g = QGroupBox('預覽圖（背景慢慢做，最低優先權，不搶你在用的程式）'); f = QFormLayout(g); v.addWidget(g)
         self.th_on = QCheckBox('開著（關掉＝不做新的預覽圖）'); self.th_n = QSpinBox(); self.th_n.setRange(1, 8); self.th_n.setSuffix(' 部同時')

@@ -1385,8 +1385,8 @@ async function tExplore(){const tb=$('#tb');if(!tb)return;
       if(canY(el,dy)){e.preventDefault();if(sm)glide(el,dy*wm);else el.scrollTop+=dy*wm;return}if(el===document.scrollingElement)return}},{passive:false});
   ['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,()=>{AN.forEach(A=>{if(A.raf)cancelAnimationFrame(A.raf)});AN.clear()},{passive:true,capture:true}))})();
 // V0.6.42 手機：往下滑把上面那排收起來（多 20% 看得到的地方），往上滑就回來
-(function(){if(matchMedia('(pointer:fine)').matches)return;let ly=scrollY,acc=0,hid=false;const hd=()=>document.querySelector('#app > header');
-  addEventListener('scroll',()=>{const h=hd();if(!h)return;const y=scrollY,d=y-ly;ly=y;if(!h.style.transition)h.style.transition='transform .22s ease';
+(function(){if(matchMedia('(pointer:fine)').matches)return;let ly=scrollY,acc=0,hid=false;const on=()=>LS.get('hdrAuto','1')!=='0';const hd=()=>document.querySelector('#app > header');
+  addEventListener('scroll',()=>{const h=hd();if(!h)return;const y=scrollY,d=y-ly;ly=y;if(!on()){if(hid){h.style.transform='';hid=false}return}if(!h.style.transition)h.style.transition='transform .22s ease';
     if(y<160){if(hid){h.style.transform='';hid=false}acc=0;return}acc=(d>0)===(acc>0)?acc+d:d;
     if(acc>40&&!hid){h.style.transform='translateY(-105%)';hid=true}else if(acc<-30&&hid){h.style.transform='';hid=false}},{passive:true});
   addEventListener('hashchange',()=>{const h=hd();if(h){h.style.transform='';hid=false}})})();
@@ -1618,6 +1618,7 @@ function secLab(){const vt=v=>String(v||'').split('.').map(x=>+x||0).reduce((a,x
 function secLook(){const sg=(k,v,L)=>`<div class="seg" data-ui="${k}">${L.map(([a,b])=>`<button data-v="${a}"${String(v)===String(a)?' class="on"':''}>${b}</button>`).join('')}</div>`;
   return `<div class="ssec"><div class="si"><b>主題</b>${sg('mode',UI.mode,[['dark','🌙 深色'],['light','☀ 淺色'],['auto','🌗 跟著時間']])}</div><div class="si"><b>字體大小</b>${sg('fs',UI.fs,[['s','小'],['m','中'],['l','大']])}</div>
    <div class="si"><b>檔案總管一列幾張</b>${sg('cols',S.cols,COLS.map(c=>[c,c==='auto'?'自動':c]))}<small>也可以在清單上兩指捏合調整</small></div>
+   <div class="si"><label><input type="checkbox" ${LS.get('hdrAuto','1')!=='0'?'checked':''} onchange="LS.set('hdrAuto',this.checked?'1':'0');toast(this.checked?'往下滑會收起上面那排':'上面那排一直留著')"> 往下滑時收起最上面那排（多出看得到的地方）</label></div>
    <div class="si"><b>預覽格子一列幾張</b><div class="pnum"><button data-uistep="-1">－</button><input type="number" data-ui="tcols" value="${LS.get('tcols',4)}" min="2" max="30"><button data-uistep="1">＋</button><span>2～30</span></div></div>
    <div class="si"><b>預覽格子每幾秒一張</b>${sg('gs',LS.get('gs',2),GSTEPS.map(c=>[c,c>=60?c/60+'分':c+'秒']))}</div>
    <div class="si"><b>播放時左右滑動一次最多</b>${sg('swipeMax',swMax(),[[0,'關閉'],[30,'30 秒'],[60,'1 分'],[120,'2 分'],[180,'3 分'],[300,'5 分'],[600,'10 分']])}<small>滑得快、滑得長＝跳得遠；慢慢滑＝幾秒幾秒微調。拖著不放畫面就跟著走。</small></div>
