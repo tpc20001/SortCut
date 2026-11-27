@@ -1390,6 +1390,15 @@ async function tExplore(){const tb=$('#tb');if(!tb)return;
     if(y<160){if(hid){h.style.transform='';hid=false}acc=0;return}acc=(d>0)===(acc>0)?acc+d:d;
     if(acc>40&&!hid){h.style.transform='translateY(-105%)';hid=true}else if(acc<-30&&hid){h.style.transform='';hid=false}},{passive:true});
   addEventListener('hashchange',()=>{const h=hd();if(h){h.style.transform='';hid=false}})})();
+// V0.6.49 ☁ 有新版：每一頁最上面一條「⬇ 更新」，不用再找到「版本與更新」
+async function updBanner(){try{const j=await api('/api/cloud_upd',undefined,{quiet:true});let r=j.r||{};
+  if(!r.t||Date.now()/1000-r.t>3600){try{const c=await api('/api/cloud_upd',{a:'check'},{quiet:true});if(c&&c.ok!==undefined)r=c}catch(e){}}const I=r.info||{};const vt=x=>String(x||'').split('.').map(n=>+n||0);
+  const nv=I.version,cmp=(a,b)=>{a=vt(a);b=vt(b);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return (a[i]||0)-(b[i]||0)}return 0};let el=$('#updBan');
+  if(!(r.ok&&nv&&cmp(nv,j.cur||VER)>0)||LS.get('updSkip','')===nv){if(el)el.remove();return}
+  if(!el){el=document.createElement('div');el.id='updBan';el.style.cssText='display:flex;gap:8px;align-items:center;padding:8px 12px;margin:8px 12px 0;background:linear-gradient(90deg,#173a2a,#14301f);border:1px solid #2f7a4f;border-radius:12px;font-size:14px';const v_=$('#v');if(!v_)return;v_.parentNode.insertBefore(el,v_)}
+  el.innerHTML=`<span style="flex:1">☁ 有新版 <b>V${esc(nv)}</b>${(I.notes||[])[0]?` <span class="mu">${esc(String(I.notes[0]).slice(0,40))}…</span>`:''}</span><button class="pill acc" id="updGo">⬇ 更新</button><button class="pill" id="updNo" title="這版先不要">✕</button>`;
+  $('#updGo').onclick=async()=>{$('#updGo').disabled=true;const x=await api('/api/cloud_upd',{a:'go'});toast(x.message||'',6000);el.remove()};$('#updNo').onclick=()=>{LS.set('updSkip',nv);el.remove()}}catch(e){}}
+setTimeout(updBanner,4000);setInterval(updBanner,10*60*1000);
 async function tConv(){LS.set('cv',CV);
   $('#tb').innerHTML=`<div id="cvg"></div><div class="seg" id="cvtab" style="margin-bottom:8px;width:100%">${[['pick','➕ 選檔'],['run','⚙ 轉檔中'],['done','✔ 完成'],['fail','✖ 失敗']].map(([k,n])=>`<button data-k="${k}" style="flex:1"${CV.tab===k?' class="on"':''}>${n}</button>`).join('')}</div><div id="cvb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;
   $('#cvtab').onclick=e=>{const b=e.target.closest('button');if(!b)return;CV.tab=b.dataset.k;CVSEL.clear();tConv()};
