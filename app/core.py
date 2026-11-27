@@ -6377,17 +6377,24 @@ class Engine:
         if time.time() - c['t'] < 2: return c['v']
         q = lambda s, a=(): (self.db.one(s, a) or [0])[0] or 0
         lt = time.localtime(); day0 = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
-        v = {'graded_today': q('SELECT COUNT(*) FROM files WHERE length(grade)>0 AND grade_t>=?', (day0,)), 'files': q('SELECT COUNT(*) FROM files WHERE missing=0'), 'bytes': q('SELECT SUM(size) FROM files WHERE missing=0'),
-             'probe_left': q("SELECT COUNT(*) FROM files WHERE probed IN (0,2) AND missing=0 AND arch=''"), 'probe_bad': q('SELECT COUNT(*) FROM files WHERE probed=3 AND missing=0'),
-             'th_done': q('SELECT COUNT(*) FROM files WHERE th_state=2 AND missing=0'), 'th_left': q("SELECT COUNT(*) FROM files WHERE th_state IN (0,1) AND has_v=1 AND probed!=3 AND missing=0 AND arch=''"),
-             'th_left_s': q("SELECT SUM(dur) FROM files WHERE th_state IN (0,1) AND has_v=1 AND probed=1 AND missing=0 AND arch=''"),
-             'th_fail': q('SELECT COUNT(*) FROM files WHERE th_state=3 AND missing=0'), 'cv_wait': q('SELECT COUNT(*) FROM files WHERE cv_state=1'),
-             'cv_done': q('SELECT COUNT(*) FROM files WHERE cv_state=3'), 'cv_fail': q('SELECT COUNT(*) FROM files WHERE cv_state=4'),
-             'nonmp4': q("SELECT COUNT(*) FROM files WHERE missing=0 AND ext NOT IN ('.mp4','.m4v')")}
-        try:                                                                    # V0.1.53 側邊欄大數字：待整理、還沒分級（跟檔案總管一樣篩掉不列的格式）
-            es, ea = self.ext_sql(); w_ = "missing=0 AND arch=''" + (' AND ' + es if es else '')
-            v['lib'] = q(f'SELECT COUNT(*) FROM files WHERE {w_}', tuple(ea)); v['nograde'] = q(f'SELECT COUNT(*) FROM files WHERE {w_} AND length(grade)=0', tuple(ea))
-        except Exception: v['lib'] = v['files']; v['nograde'] = 0
+        try:                                                                    # V0.6.62 15 次全表掃描 → 1 次（大影片庫手機每 3 秒問一次，省很多）
+            try: es, ea = self.ext_sql()
+            except Exception: es, ea = '', []
+            ok_ = "missing=0 AND arch=''" + (' AND (' + es + ')' if es else '')
+            K = [('graded_today', "COUNT(CASE WHEN length(grade)>0 AND grade_t>=? THEN 1 END)"), ('files', "COUNT(CASE WHEN missing=0 THEN 1 END)"), ('bytes', "SUM(CASE WHEN missing=0 THEN size END)"),
+                 ('probe_left', "COUNT(CASE WHEN probed IN (0,2) AND missing=0 AND arch='' THEN 1 END)"), ('probe_bad', "COUNT(CASE WHEN probed=3 AND missing=0 THEN 1 END)"),
+                 ('th_done', "COUNT(CASE WHEN th_state=2 AND missing=0 THEN 1 END)"), ('th_left', "COUNT(CASE WHEN th_state IN (0,1) AND has_v=1 AND probed!=3 AND missing=0 AND arch='' THEN 1 END)"),
+                 ('th_left_s', "SUM(CASE WHEN th_state IN (0,1) AND has_v=1 AND probed=1 AND missing=0 AND arch='' THEN dur END)"),
+                 ('th_fail', "COUNT(CASE WHEN th_state=3 AND missing=0 THEN 1 END)"), ('cv_wait', "COUNT(CASE WHEN cv_state=1 THEN 1 END)"),
+                 ('cv_done', "COUNT(CASE WHEN cv_state=3 THEN 1 END)"), ('cv_fail', "COUNT(CASE WHEN cv_state=4 THEN 1 END)"),
+                 ('nonmp4', "COUNT(CASE WHEN missing=0 AND ext NOT IN ('.mp4','.m4v') THEN 1 END)"),
+                 ('lib', f"COUNT(CASE WHEN {ok_} THEN 1 END)"), ('nograde', f"COUNT(CASE WHEN {ok_} AND length(grade)=0 THEN 1 END)")]
+            r = self.db.one('SELECT ' + ','.join(x[1] for x in K) + ' FROM files', (day0,) + tuple(ea) + tuple(ea)) or [0] * len(K)
+            v = {k: (r[n] or 0) for n, (k, _s) in enumerate(K)}
+        except Exception:
+            v = {'graded_today': q('SELECT COUNT(*) FROM files WHERE length(grade)>0 AND grade_t>=?', (day0,)), 'files': q('SELECT COUNT(*) FROM files WHERE missing=0'), 'bytes': q('SELECT SUM(size) FROM files WHERE missing=0'),
+                 'th_done': q('SELECT COUNT(*) FROM files WHERE th_state=2 AND missing=0'), 'th_left': 0, 'th_left_s': 0, 'probe_left': 0, 'probe_bad': 0, 'th_fail': 0, 'cv_wait': 0, 'cv_done': 0, 'cv_fail': 0, 'nonmp4': 0}
+            v['lib'] = v['files']; v['nograde'] = 0
         v.update(self.th_eta(v.get('th_left_s') or 0))
         c.update(t=time.time(), v=v); return v
 
