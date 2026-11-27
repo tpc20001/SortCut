@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.56'
+APP_VERSION = '0.6.57'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6842,9 +6842,10 @@ class DashPage(QWidget):
             G = j.get('G') or {}; n = j['n']
             L.addWidget(self._head('🎬 VideoSift 總覽', [('▦ 進 10 秒剪輯 ›', lambda: W.enter(0), '#3987e5')]), 0, 0, 1, 4)
             L.addWidget(self._kpi('🎬 影片', f"{n:,} 部", f"{fmt_b(j['b'])}・預覽圖 {_dzp(j['th'], n)}%", DZC[0], pct=_dzp(j['th'], n), go=0), 1, 0)
-            L.addWidget(self._kpi('✅ 已分級', f"{_dzp(j['graded'], n)}%", f"{j['graded']:,}／{n:,} 部", DZC[2], delta=j['today'], pct=_dzp(j['graded'], n)), 1, 1)
-            L.addWidget(self._kpi('✂ 初剪', f"{j['cutf']:,} 部", f"{j['cuts']:,} 段・收藏 {j['fav']:,}", DZC[1], delta=j['cut_today']), 1, 2)
-            L.addWidget(self._kpi('🗑 F（待刪）', fmt_b(j['F_b']), f"{j['F_n']:,} 部，可以清掉的空間", DZC[7]), 1, 3)
+            fx_ = lambda f_, nm_: (lambda: (self.win.nav.setCurrentRow(0), self.win.browse.use_view({'name': nm_, 'folder': '', 'flt': f_, 'sort': 'name', 'sub': True})))   # V0.6.57 卡片點了直接篩好
+            L.addWidget(self._kpi('✅ 已分級', f"{_dzp(j['graded'], n)}%", f"{j['graded']:,}／{n:,} 部", DZC[2], delta=j['today'], pct=_dzp(j['graded'], n), go=fx_('nograde', '還沒分級'), tip='點一下：看還沒分級的'), 1, 1)
+            L.addWidget(self._kpi('✂ 初剪', f"{j['cutf']:,} 部", f"{j['cuts']:,} 段・收藏 {j['fav']:,}", DZC[1], delta=j['cut_today'], go=fx_('cut', '有初剪'), tip='點一下：看有初剪的'), 1, 2)
+            L.addWidget(self._kpi('🗑 F（待刪）', fmt_b(j['F_b']), f"{j['F_n']:,} 部，可以清掉的空間", DZC[7], go=fx_('F', 'F（待刪）'), tip='點一下：看 F 級（上面有 🔥 清空待刪）'), 1, 3)
             seg = [('S', G.get('S', 0), DZC[0]), ('A', G.get('A', 0), DZC[2]), ('E', G.get('E', 0), DZC[3]), ('F（待刪）', G.get('F', 0), DZC[7]), ('還沒分級', max(0, n - j['graded']), DZG)]
             L.addWidget(self._donut_card('🥧 分級分布', '滑過去看數字', seg, f"{_dzp(j['graded'], n)}%", '已分級'), 2, 0, 1, 2)
             L.addWidget(self._d7_card('📅 最近 7 天每天分級', f"今天 +{j['today']:,}", j['d7'], DZC[2]), 2, 2, 1, 2)
