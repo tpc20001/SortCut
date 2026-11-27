@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.64'
+APP_VERSION = '0.6.65'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -828,7 +828,7 @@ def html_esc(t):
 
 
 NEW_FLOW = [   # V0.3.18 🚀 用新功能的建議流程（電腦說明頁、手機工具頁共用）
-    ('① 新影片自己進來', '打開 👀 自動找新影片：TikLive 錄好的檔案每 30 分鐘自動出現、自動排預覽圖。💽 空間地圖＋⚠ 空間提醒會告訴你哪顆快滿（照速度算幾天會滿）。'),
+    ('① 新影片自己進來', '打開 👀 自動找新影片：錄影程式錄好的檔案每 30 分鐘自動出現、自動排預覽圖。💽 空間地圖＋⚠ 空間提醒會告訴你哪顆快滿（照速度算幾天會滿）。'),
     ('② 先把明顯不要的清掉', '打開 😴 背景算靜止比例，等它算一陣子 → ⚡ 規則分級：「靜止超過 80 % → F」、「短於 20 秒 → F」，先預覽符合幾部再套用（可以復原）；滿意就「💾 存成自動規則」，之後新進來的也自動分（剪過、收藏、有書籤的不會動）。'),
     ('③ 從最有東西的資料夾開始', '📂 各資料夾分級進度：「可以審」最多的排最前面，點兩下直接去；或排序選「😴 靜止多→少」先看最可能不要的。'),
     ('④ 一部一部快速分', '⏱ 時長／📺 畫質篩選縮小範圍；🤖 分級建議（按 G 照建議分）；🎬 換場景標記、🔥 動得最多、😴 靜止灰掉，一眼看出哪裡有內容；👆 手機左右滑換部。'),
@@ -4758,7 +4758,7 @@ class MovePage(QWidget):
                             '• VideoSIFT（初剪、歸檔、待刪）和 DELETE 會併到目的硬碟本來的 VideoSIFT、DELETE 裡（同名的檔不會蓋掉，自動改名）。\n'
                             '• 分級、備註、初剪紀錄、預覽圖都跟著過去，不用重做。每個檔：複製 → 比對一樣 → 改紀錄 → 才刪原檔；比對不一樣就不刪。\n'
                             '• 優先權低、照速度限速、一次只用 4 MB 記憶體；電腦很忙（CPU 超過「後台」設定的上限）時放慢一半，但不會停，一定會一直前進。\n'
-                            '• 10 分鐘內還在被改的檔（例如 TikLive 正在錄）最後再搬；搬的時候這顆先不做預覽圖、轉檔。程式關掉、熱更新後會接著搬。'))
+                            '• 10 分鐘內還在被改的檔（例如正在錄影的檔）最後再搬；搬的時候這顆先不做預覽圖、轉檔。程式關掉、熱更新後會接著搬。'))
         r = QHBoxLayout(); v.addLayout(r)
         self.b_plan = QPushButton('🔍 先算一下（幾個檔、多大、空間夠不夠）'); self.b_go = QPushButton('▶ 開始搬'); self.b_go.setObjectName('start')
         self.b_pause = QPushButton('⏸ 暫停'); self.b_stop = QPushButton('⏹ 停止'); self.b_clear = QPushButton('清掉這次的紀錄')
@@ -5466,7 +5466,7 @@ class SetPage(QWidget):
             QMessageBox.warning(self, '手機 App', f'Tailscale 設定沒成功：\n{(out or "")[-600:]}\n\n常見原因：Tailscale 還沒登入、管理後台沒開 HTTPS（DNS → Enable HTTPS）。'); return
         QApplication.clipboard().setText(T['url'])
         QMessageBox.information(self, '手機 App', f'好了！網址已複製：\n\n{T["url"]}\n\n用手機（Tailscale 開著）打開這個網址 → 輸入 PIN → Chrome 右上「⋮」→「安裝應用程式」／iPhone Safari「分享」→「加入主畫面」。\n\n'
-                                f'這個埠只給 SortCut 用，不會影響 TikLive、FusionStitch。')
+                                f'這個埠只給 SortCut 用，不會影響其他程式。')
 
     def _web_copy(self):
         u = (self._web_ts or {}).get('url')
@@ -5786,7 +5786,7 @@ NEW_LABS = [
     ('pc_overview', '🖥 硬碟在哪台電腦', '兩台電腦輪流用的時候：「🚚 搬硬碟」頁右上（或 Ctrl+K）列出每顆接著的硬碟，紀錄最後是「這台」還是「另一台：名稱」寫的、什麼時候、幾部、分級多少；另一台寫的用橘色標出來。也可以一鍵把紀錄寫到各硬碟。手機在 工具 →「🆕 新功能」。', '0.2.51'),
     ('privacy', '🙈 隱私模糊', '有人經過時一鍵把檔案總管的預覽圖、清單全部模糊：下方狀態列「🙈」或 Ctrl+Shift+H 切換（下次打開會記得）。手機檔案總管分級列也有「🙈」，看檔案、播放時也一起模糊，按住預覽圖可以暫時看清楚。', '0.2.55'),
     ('recent_dirs', '🕘 最近開過的資料夾', '檔案總管搜尋框旁多一個「🕘」：最近開過的 15 個資料夾，一按就跳回去（不用在左邊樹裡一層一層找）。電腦和手機共用同一份；手機在分級列最前面。', '0.2.56'),
-    ('auto_scan', '👀 自動找新影片', 'TikLive 一直在錄新影片的話：每隔一段時間（預設 30 分鐘，可以改）自動重新掃描影片庫一次，新錄好的影片自己出現、自動排預覽圖，不用再按「🔄 重新掃描」。正在搬硬碟、正在掃描時會先跳過。找到新的會記在 LOG。', '0.2.58'),
+    ('auto_scan', '👀 自動找新影片', '錄影程式一直在錄新影片的話：每隔一段時間（預設 30 分鐘，可以改）自動重新掃描影片庫一次，新錄好的影片自己出現、自動排預覽圖，不用再按「🔄 重新掃描」。正在搬硬碟、正在掃描時會先跳過。找到新的會記在 LOG。', '0.2.58'),
     ('rules', '⚡ 規則分級', '還沒分級的影片，用條件一次標好：例如「短於 20 秒 → F」「低於 480p → E」「檔名有 test → F」，可以只做目前資料夾。套用前先看符合幾部、列出例子；規則標的不算進今天的分級數，可以一鍵復原。剪過初剪的、⭐ 收藏的、🔖 有書籤的不會被規則動到。也可以「💾 存成自動規則」：之後每分鐘自動對還沒分級的套用（TikLive 新錄的也會自動被分），還能「↩ 復原最近 24 小時自動規則分的」。在 🧰 工具箱 或 Ctrl+K；手機在 工具 →「🆕 新功能」。', '0.2.60'),
     ('guess', '🤖 分級建議', '還沒分級的影片，看同一個作者／主播（從檔名猜）你以前分過的大多是哪一級，在分級按鈕旁邊小字提示「🤖 猜 F」（至少分過 5 部、6 成以上同一級才會猜；看不出作者時改看同一個資料夾，至少 8 部、7 成以上；都看不出來但 😴 靜止超過 8 成的猜 F）。只是建議，不會自動分級。手機看檔案時分級按鈕上面也會顯示。', '0.2.62'),
     ('search_hist', '🔎 搜尋紀錄', '檔案總管搜尋框記住你搜過的字（最多 20 個，電腦和手機共用）：打一兩個字就下拉出以前搜過的，點一下就搜。按 Enter 或離開搜尋框才記。', '0.2.65'),

@@ -209,7 +209,11 @@ class Settings:
 
     def get(self, k): return self.d.get(k, DEFAULTS.get(k))
 
-    QUIET = {'perf_pos'}                                                    # 拖來拖去的位置不記
+    QUIET = {'perf_pos', 'perf_float', 'last_page', 'last_file', 'nav_seen', 'nav_shut5', 'side_w', 'card_w', 'grid_cols', 'list_view', 'ex_sort', 'cmp_layout',   # V0.6.65 畫面位置、最近用過、計數這類不寫 LOG（之前每換一頁就一行）
+             'recent_dirs', 'recent_vol', 'search_hist', 'tq_hist', 'ver_seen', 'week_seen', 'lab_seen', 'player_keys_seen', 'tour_seen', 'mf_lag_ms', 'bg_last', 'hs_boost_until',
+             'guess_stat', 'share_t', 'pack_t', 'cv_cap_t', 'rule_last', 'auto_rule_log', 'daily_goal_hit', 'cover_stats', 'up_ac_day', 'shrink_hist', 'free_hist', 'sprint_hist',
+             'copy_q', 'cloud_upd', 'mvq', 'web_tok_meta'}
+    SECRET = ('pin', 'tok', 'salt', 'hash', 'pass', 'key')                         # V0.6.65 密碼、登入碼不寫進 LOG（只寫「改了」）
 
     def set(self, k, v):
         old = self.d.get(k, DEFAULTS.get(k))
@@ -217,7 +221,8 @@ class Settings:
         lg = getattr(self, 'log', None)
         if lg and k not in self.QUIET:
             sv = lambda x: (json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else repr(x))[:300]
-            lg.w(f'設定：{k}　{sv(old)} → {sv(v)}')
+            if any(x in k.lower() for x in self.SECRET) and k not in ('player_keys', 'brt_k', 'cv_trial_k'): lg.w(f'設定：{k}　（已更改，內容不記）')
+            else: lg.w(f'設定：{k}　{sv(old)} → {sv(v)}')
         with self.lock:
             self.d[k] = v; self.path.parent.mkdir(parents=True, exist_ok=True); tmp = self.path.with_suffix('.tmp')
             tmp.write_text(json.dumps(self.d, ensure_ascii=False, indent=1), encoding='utf-8'); os.replace(str(tmp), str(self.path))
