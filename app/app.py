@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.38'
+APP_VERSION = '0.6.39'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -8720,7 +8720,8 @@ class NavList(QListWidget):
         try:
             it = self.item(row); pg = int(it.data(Qt.UserRole)) if it is not None else -1
         except Exception: return
-        if pg >= 0 and pg != self._page: self._page = pg; self.on_page(pg)
+        if pg >= 0 and pg != self._page:
+            self._page = pg; self._seen(self._group_of(pg)); self.on_page(pg)
 
     def setCurrentRow(self, pg, *a):
         pg = int(pg); it = self._items.get(pg)
@@ -8738,7 +8739,25 @@ class NavList(QListWidget):
 
     def _shut(self):
         v = ENG.cfg.get('nav_shut5')                                             # V0.5.16 分組改成工作流程後重新記；第一次：HotZone、設定與說明先收起來（點標題打開）
-        return set(v) if isinstance(v, list) else {'HotZone 檔案與硬碟', '設定與說明'}
+        shut = set(v) if isinstance(v, list) else {'HotZone 檔案與硬碟', '設定與說明'}
+        if ENG.cfg.get('nav_auto_shut') is not False:                            # V0.6.39 介面簡化：14 天沒點過的分組自動收起來（點標題就打開，不會刪）
+            seen = ENG.cfg.get('nav_seen') or {}; now = time.time()
+            if isinstance(seen, dict) and seen:
+                t0 = min(float(x) for x in seen.values())                     # 開始記錄還不滿 14 天：先不收
+                if now - t0 > 14 * 86400:
+                    shut |= {g for _h, g, _i in self._groups if now - float(seen.get(g, 0)) > 14 * 86400 and g not in (ENG.cfg.get('nav_keep') or [])}
+        return shut
+
+    def _seen(self, g):
+        try:
+            seen = dict(ENG.cfg.get('nav_seen') or {}); now = time.time()
+            if now - float(seen.get(g, 0)) > 3600: seen[g] = now; ENG.cfg.set('nav_seen', seen)
+        except Exception: pass
+
+    def _group_of(self, pg):
+        for _h, g, its in self._groups:
+            if self._items.get(pg) in its: return g
+        return ''
 
     @staticmethod
     def group_mode(name):
@@ -8770,8 +8789,11 @@ class NavList(QListWidget):
     def _clicked(self, item):
         try:
             if item is None or int(item.data(Qt.UserRole)) >= 0: return
-            name = item.text().split('　')[0]; shut = self._shut()
-            shut.symmetric_difference_update({name}); ENG.cfg.set('nav_shut5', sorted(shut)); self.apply_collapse()
+            name = item.text().split('　')[0]; v = ENG.cfg.get('nav_shut5')
+            man = set(v) if isinstance(v, list) else {'HotZone 檔案與硬碟', '設定與說明'}
+            if name in self._shut(): man.discard(name); self._seen(name)        # 打開：當作剛用過（不會又被自動收）
+            else: man.add(name)
+            ENG.cfg.set('nav_shut5', sorted(man)); self.apply_collapse()
             cur = self._items.get(self._page)
             if cur is not None: QListWidget.setCurrentItem(self, cur)                # 點標題不要把選到的那頁取消掉
         except Exception: pass
