@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.47'
+APP_VERSION = '0.6.48'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -8786,7 +8786,7 @@ class NavList(QListWidget):
             nohz = self._no_hz()
             for h, name, its in self._groups:
                 gm = self.group_mode(name); away = bool(m and gm and gm != m and cur not in its)
-                vis = [it for it in its if not (nohz and 'HotZone' in (it.text() or '') and it is not cur)]
+                vis = [it for it in its if not (nohz and ('HotZone' in (it.text() or '') or 'HotZone' in name) and it is not cur)]
                 h.setHidden(away or not vis)
                 off = away or (name in shut and cur not in its)
                 for it in its: it.setHidden(off or it not in vis)
