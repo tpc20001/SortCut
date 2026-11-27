@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.46'
+APP_VERSION = '0.6.47'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -5227,6 +5227,8 @@ class SetPage(QWidget):
         self.wh_m.currentIndexChanged.connect(lambda _i: (ENG.cfg.set('wheel_mult', float(self.wh_m.currentData())), self.win.msg(f'🖱 滾輪 ×{self.wh_m.currentData():g}')))
         self.wh_s.toggled.connect(lambda on: ENG.cfg.set('wheel_smooth', bool(on)))
         f.addRow('捲動速度', self.wh_m); f.addRow(self.wh_s)
+        self.c_shz = QCheckBox('左邊選單顯示 HotZone 的項目（這台沒設定過 HotZone 時預設藏起來）'); self.c_shz.setChecked(ENG.cfg.get('nav_show_hz') is True)   # V0.6.47
+        self.c_shz.toggled.connect(lambda on: (ENG.cfg.set('nav_show_hz', bool(on)), self.win.nav.apply_collapse())); f.addRow(self.c_shz)
         f.addRow(self._note('Ctrl＋滾輪（一列幾張）、Alt＋滾輪、時間軸、音量這些自己的滾輪功能照舊。手機網頁的電腦版（瀏覽器）在右下角另外調。'))
         g = QGroupBox('預覽圖（背景慢慢做，最低優先權，不搶你在用的程式）'); f = QFormLayout(g); v.addWidget(g)
         self.th_on = QCheckBox('開著（關掉＝不做新的預覽圖）'); self.th_n = QSpinBox(); self.th_n.setRange(1, 8); self.th_n.setSuffix(' 部同時')
@@ -8742,6 +8744,15 @@ class NavList(QListWidget):
                     shut |= {g for _h, g, _i in self._groups if now - float(seen.get(g, 0)) > 14 * 86400 and g not in (ENG.cfg.get('nav_keep') or [])}
         return shut
 
+    @staticmethod
+    def _no_hz():
+        """V0.6.47 介面簡化：這台沒設定過 HotZone → 選單裡 HotZone 的項目先藏起來（設定 →「顯示 HotZone 選單」可以打開）."""
+        try:
+            if ENG.cfg.get('nav_show_hz') is True: return False
+            H = getattr(ENG, 'hz', None)
+            return not (H is not None and (H.cfg() or {}).get('root'))
+        except Exception: return False
+
     def _seen(self, g):
         try:
             seen = dict(ENG.cfg.get('nav_seen') or {}); now = time.time()
@@ -8772,11 +8783,13 @@ class NavList(QListWidget):
         """收起來的分組只留標題（目前這頁所在的組一定打開）；V0.5.70 只顯示目前這一邊（🎛 左上角切換）的分組."""
         try:
             shut = self._shut(); cur = self._items.get(self._page); m = getattr(self, 'mode', '')
+            nohz = self._no_hz()
             for h, name, its in self._groups:
                 gm = self.group_mode(name); away = bool(m and gm and gm != m and cur not in its)
-                h.setHidden(away)
+                vis = [it for it in its if not (nohz and 'HotZone' in (it.text() or '') and it is not cur)]
+                h.setHidden(away or not vis)
                 off = away or (name in shut and cur not in its)
-                for it in its: it.setHidden(off)
+                for it in its: it.setHidden(off or it not in vis)
                 h.setText(name + ('　▸ ' + str(len(its)) if off and not away else ''))
         except Exception: pass
 
