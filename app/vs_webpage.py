@@ -175,6 +175,7 @@ input,select,textarea{background:var(--btn);color:var(--text);border:1px solid v
 .scat button small{display:block;font-weight:500;font-size:10.5px;opacity:.75;margin-top:2px}.scat button.on{background:var(--tabon);border-color:var(--tabline);color:var(--strong)}
 .ssearch{width:100%;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:inherit;padding:0 8px;font-size:13px;margin-bottom:2px}
 .sbody{flex:1;min-width:0}.stt{font-size:19px;margin:2px 2px 12px;color:var(--strong)}
+@media(max-width:600px){.s2{flex-direction:column;gap:6px}.scat{position:static;width:100%;max-height:none;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:6px;padding-bottom:4px;scrollbar-width:none}.scat::-webkit-scrollbar{display:none}.scat .ssearch{flex:0 0 120px;margin:0}.scat .sch{display:none}.scat button{flex:none;white-space:nowrap;padding:7px 11px;border-radius:999px}.scat button small{display:none}.scat .scl{flex:none;white-space:nowrap;margin:0!important;padding:7px 11px!important;border-radius:999px!important}.scat .scl small{display:none!important}}   /* V0.6.60 手機直的：設定分類改成上面一排可滑，內容全寬 */
 .ssec{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 14px;margin-bottom:14px}
 .si{padding:14px 0;border-bottom:1px solid var(--line)}.si:last-child{border-bottom:0}.si>b{display:block;color:var(--strong);margin-bottom:9px;font-size:15px}.si small{display:block;color:var(--sub);font-size:12px;margin-top:8px;line-height:1.5}
 .si .seg{flex-wrap:wrap}.si .seg button{height:36px}
@@ -1598,7 +1599,7 @@ async function viewSet(){const gen=S.gen;
   sc.onclick=e=>{const b=e.target.closest('button[data-c]');if(b){$('#ssq').value='';setCat(b.dataset.c)}};
   let qt;$('#ssq').oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>setSearch(e.target.value.trim()),250)};
   try{SETD=await api('/api/settings')}catch(e){return}if(gen!==S.gen)return;setCat(cur)}
-function setCat(k){S.scat=k;$$('#scat button').forEach(b=>b.classList.toggle('on',b.dataset.c===k));const sb=$('#sbody');if(!sb||!SETD)return;const c=SCAT.find(x=>x[0]===k)||SCAT[0];
+function setCat(k){S.scat=k;$$('#scat button').forEach(b=>{b.classList.toggle('on',b.dataset.c===k);if(b.dataset.c===k&&innerWidth<=600)try{b.scrollIntoView({block:'nearest',inline:'center'})}catch(e){}});const sb=$('#sbody');if(!sb||!SETD)return;const c=SCAT.find(x=>x[0]===k)||SCAT[0];
   const fn={look:secLook,ext:secExt,faces:secFaces,lab:secLab,about:secAbout,lib:()=>'<div id="lset"><div class="empty">讀取中…</div></div>'}[c[0]];sb.innerHTML=`<h2 class="stt">${c[1]} ${c[2]}</h2>`+(fn?fn():secPc(SKEYS[c[0]]||[]));bindSet(sb);if(c[0]==='faces')faceSet();if(c[0]==='lib')libSet()}
 function setSearch(q){const sb=$('#sbody');if(!sb||!SETD)return;if(!q){setCat(S.scat||'look');return}const ql=q.toLowerCase();const R=SETD.settings.concat(SETD.lab).filter(s=>s.name.toLowerCase().includes(ql));
   $$('#scat button').forEach(b=>b.classList.remove('on'));
