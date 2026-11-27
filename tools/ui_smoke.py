@@ -101,6 +101,12 @@ def main():
         print(f'  🖱 滾輪裝到 {n} 個捲動框', flush=True)
         if not n: raise RuntimeError('滾輪沒有裝到任何捲動框')
     step('滾輪加速', wh)
+    def idle():                                                                 # V0.6.69 閒著 10 秒用多少 CPU（畫面那邊），印出最花時間的
+        import cProfile, pstats, io
+        w._page(0); pump(2.0); pr = cProfile.Profile(); c0 = time.process_time(); pr.enable(); pump(10.0); pr.disable()
+        print(f'  💤 閒著 10 秒 CPU {time.process_time() - c0:.2f} 秒', flush=True)
+        so = io.StringIO(); pstats.Stats(pr, stream=so).sort_stats('tottime').print_stats(12); print(so.getvalue()[-3500:], flush=True)
+    step('閒著的 CPU', idle)
     pump(3.0)
     try:
         w.quitting = True; w.close(); pump(0.5); A.ENG.shutdown() if hasattr(A.ENG, 'shutdown') else None
