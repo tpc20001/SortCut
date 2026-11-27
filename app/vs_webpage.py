@@ -1310,9 +1310,9 @@ function goalHTML(G){const ok=G.eta_days!=null&&G.eta_days<=G.left_days;return `
   <div class="mu" style="font-size:12.5px">已省 <b style="color:var(--green)">${fmtB(G.saved)}</b>（${G.pct.toFixed(1)}%）· 現在 ${fmtB(G.cur)}${G.pend?`（含 DELETE ${fmtB(G.pend)}）`:''} · 還要省 <b style="color:var(--orange)">${fmtB(G.need)}</b> · 剩 ${G.left_days.toFixed(1)} 天 · 每天要省 ${fmtB(G.need_day)}${G.pace?` · 最近每天省 ${fmtB(G.pace)}`:''}${G.eta_days?` · 預估 <b style="color:${ok?'var(--green)':'var(--red)'}">${G.eta_days.toFixed(0)} 天</b>`:''}</div>
   ${(G.tips||[]).map(t=>`<div class="mu" style="margin-top:4px">💡 ${esc(t)}</div>`).join('')}</div>`}
 // V0.6.19 🗺 檔案總覽：像 Everything 搜尋＋像 TreeSize 看哪個資料夾最大；長按資料夾 → 轉檔
-const EX=Object.assign({p:'',sort:'size',q:''},LS.get('ex',{}));
+const EX=Object.assign({p:'',sort:'size',q:''},LS.get('ex',{}));delete EX.noAuto;
 const EXC=['#3987e5','#45b5d4','#45d483','#c9b44d','#f0ad4e','#ff7e6b','#b48cff','#ff7eb6'];
-function exSave(){LS.set('ex',EX)}
+function exSave(){const {noAuto,...o}=EX;LS.set('ex',o)}
 async function exConvMenu(path,name){toast('計算可以省多少…');
   const K=[['h264','H.264 → H.265'],['nonmp4','非 MP4 → MP4（H.265）'],['all','兩種都要']];
   const P=await Promise.all(K.map(([k])=>api(U('/api/conv2',{a:'plan',kind:k,sort:'size_desc',exts:'',smin:0,smax:0,folders:path,n:0,t:0}),undefined,{quiet:true}).catch(()=>({}))));
