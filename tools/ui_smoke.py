@@ -42,6 +42,13 @@ def no_modal():
     QInputDialog.getItem = staticmethod(lambda *a, **k: ('', False))
 
 
+def shot(w, name):
+    """V0.6.44 每一頁存一張圖（雲端 Actions 的 ui-shots 可以下載來看畫面）."""
+    try:
+        d = KIT / 'ui_shots'; d.mkdir(exist_ok=True); w.grab().save(str(d / f'{name}.png'))
+    except Exception as ex: print('  (截圖失敗)', name, ex, flush=True)
+
+
 def step(name, fn):
     print('  ▶', name, flush=True)
     try: fn(); pump(0.3); print('  ✔', name, flush=True)
@@ -59,10 +66,19 @@ def main():
     root = Path(tempfile.mkdtemp()); (root / 'Data').mkdir(); (root / 'LOG').mkdir(); (root / 'UPDATE').mkdir()
     A.ROOT = root
     A.BUS = A.Bus(); A.LOADER = A.ImgLoader(); A.ENG = core.Engine(root, version=A.APP_VERSION); qa._vs_eng = A.ENG
-    w = A.Main(); w.show(); qa._vs_main = w; pump(2.0)
+    try:                                                                        # V0.6.44 放一些假的影片紀錄，截圖才看得到畫面長怎樣
+        import random, time as _t
+        rnd = random.Random(1); rows = []
+        for i in range(300):
+            f = f'H:\\A0{i % 5}\\sub{i % 7}'
+            rows.append((f + f'\\v{i}.mp4', 'H:\\', f, f'v{i}.mp4', '.mp4', rnd.randint(10 ** 8, 5 * 10 ** 9), _t.time() - rnd.randint(0, 30000000),
+                         rnd.choice(['h264', 'hevc']), rnd.choice(['', '', 'S', 'A', 'E', 'F']), rnd.randint(30, 4000)))
+        A.ENG.db.con.executemany("INSERT INTO files(path,root,folder,name,ext,size,mtime,vcodec,grade,probed,has_v,dur) VALUES(?,?,?,?,?,?,?,?,?,1,1,?)", rows); A.ENG.db.con.commit()
+    except Exception as ex: print('  (假資料失敗)', ex, flush=True)
+    w = A.Main(); w.resize(1600, 1000); w.show(); qa._vs_main = w; pump(2.0)
     w.outer.setCurrentIndex(1)
     for pg in list(A.NavList.NAMES):
-        step(f'頁面 {pg} {A.NavList.NAMES[pg][1]}', lambda pg=pg: w._page(pg))
+        step(f'頁面 {pg} {A.NavList.NAMES[pg][1]}', lambda pg=pg: (w._page(pg), pump(0.6), shot(w, f'p{pg:02d}')))
     step('封存頁（Ctrl+Shift+R）', w.open_archive)
     def yd():
         d = A.YieldDlg(w); d.show(); pump(1.0); d.load(); d.close()
