@@ -89,10 +89,11 @@ def main():
         step(f'頁面 {pg} {A.NavList.NAMES[pg][1]}', lambda pg=pg: (w._page(pg), pump(0.6), shot(w, f'p{pg:02d}')))
     step('封存頁（Ctrl+Shift+R）', w.open_archive)
     def yd():
-        d = A.YieldDlg(w); d.show(); pump(1.0); d.load(); d.close()
+        d = A.YieldDlg(w); d.show(); pump(1.0); d.load(); pump(0.5); shot(d, 'yield'); d.close()
     step('讓路視窗', yd)
     if hasattr(w, 'conv') and hasattr(w.conv, 'tabs'):
-        for i in range(w.conv.tabs.count()): step(f'轉檔分頁 {i}', lambda i=i: w.conv.tabs.setCurrentIndex(i))
+        step('切到轉檔', lambda: (w.nav.setCurrentRow(1), pump(0.5)))
+        for i in range(w.conv.tabs.count()): step(f'轉檔分頁 {i}', lambda i=i: (w.conv.tabs.setCurrentIndex(i), pump(0.4), shot(w, f'conv{i}')))
     for nm in ('explore',):
         if hasattr(w, nm): step(f'{nm}', lambda nm=nm: getattr(w, nm).refresh() if hasattr(getattr(w, nm), 'refresh') else None)
     pump(3.0)
