@@ -172,9 +172,9 @@ function dzFit(el){if(!el)return;const f=()=>{if(!document.body.contains(el))ret
 function dzVS(j){const G=j.G||{},seg=[['S',G.S,DZC[0]],['A',G.A,DZC[2]],['E',G.E,DZC[3]],['F（待刪）',G.F,DZC[7]],['還沒分級',Math.max(0,j.n-j.graded),DZG]];
   return `<div class="dz" style="--dzcols:4;--dzk:#3987e5"><div class="dzh"><h2>🎬 VideoSift 總覽</h2><small>${new Date(j.t*1000).toTimeString().slice(0,8)} 更新</small><span class="dzsp"></span><button class="dzb dzacc" data-go="#fx">▦ 進 10 秒剪輯 ›</button><button class="dzb" data-go="#tool/report">📈 分級報表</button></div>
   ${dzKpi({l:'🎬 影片',v:dzN(j.n)+' 部',s:dzB(j.b)+'・預覽圖 '+dzP(j.th,j.n)+'%',p:dzP(j.th,j.n),c:DZC[0],go:'#fx'})}
-  ${dzKpi({l:'✅ 已分級',v:dzP(j.graded,j.n)+'%',s:dzN(j.graded)+'／'+dzN(j.n)+' 部',d:j.today,p:dzP(j.graded,j.n),c:DZC[2]})}
-  ${dzKpi({l:'✂ 初剪',v:dzN(j.cutf)+' 部',s:dzN(j.cuts)+' 段・收藏 '+dzN(j.fav),d:j.cut_today,c:DZC[1]})}
-  ${dzKpi({l:'🗑 F（待刪）',v:dzB(j.F_b),s:dzN(j.F_n)+' 部，可以清掉的空間',c:DZC[7]})}
+  ${dzKpi({l:'✅ 已分級',v:dzP(j.graded,j.n)+'%',s:dzN(j.graded)+'／'+dzN(j.n)+' 部',d:j.today,p:dzP(j.graded,j.n),c:DZC[2],go:'#fx:nograde',tip:'點一下：看還沒分級的'})}
+  ${dzKpi({l:'✂ 初剪',v:dzN(j.cutf)+' 部',s:dzN(j.cuts)+' 段・收藏 '+dzN(j.fav),d:j.cut_today,c:DZC[1],go:'#fx:cut',tip:'點一下：看有初剪的'})}
+  ${dzKpi({l:'🗑 F（待刪）',v:dzB(j.F_b),s:dzN(j.F_n)+' 部，可以清掉的空間',c:DZC[7],go:'#fx:F',tip:'點一下：看 F 級（上面有 🔥 清空待刪）'})}
   <div class="dzt dzw2" style="grid-column:span 2"><div class="dztt">🥧 分級分布<small>滑過去看數字</small></div><div class="dzdn">${dzDonut(seg,dzP(j.graded,j.n)+'%','已分級')}${dzLegend(seg,' 部')}</div></div>
   <div class="dzt dzw2" style="grid-column:span 2"><div class="dztt">📅 最近 7 天每天分級<small>今天 +${dzN(j.today)}</small></div>${dzD7(j.d7,DZC[2])}</div>
   <div class="dzt dzw2" style="grid-column:span 2"><div class="dztt">📂 各資料夾進度<small>已分級／全部</small></div>${dzBars((j.roots||[]).map(r=>({n:r.name,v:dzN(r.done)+'／'+dzN(r.n)+'（'+dzP(r.done,r.n)+'%）',p:dzP(r.done,r.n),c:DZC[0],tip:dzB(r.b)})))}</div>
@@ -211,6 +211,7 @@ document.addEventListener('click',async e=>{const pk=e.target.closest('.dz [data
   const r=await (await fetch('/fc/api/vs_fcpack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({X:pk.dataset.dzpack})})).json();alert(r.message||'好了');return}
   const u=e.target.closest('.dz [data-dzu]');if(u){try{localStorage.setItem('dzFcU',u.dataset.dzu)}catch(x){}const h=u.closest('.dz').parentElement;if(h&&h._dzj){h.innerHTML=dzFC(h._dzj);if(h.firstElementChild)h.firstElementChild.dataset.dzid=h.dataset.dz;dzFit(h.firstElementChild)}return}
   const d=e.target.closest('.dz [data-dzdel]');if(d){window.VSDEL&&VSDEL();return}const b=e.target.closest('.dz [data-go]');if(!b)return;const v=b.dataset.go,onFC=location.pathname.startsWith('/fc/');
+  if(v.startsWith('#fx:')&&!onFC&&typeof S!=='undefined'){S.folder='';S.flt=v.slice(4);S.q='';S.sub=true;try{saveView()}catch(x){}location.hash='fx';return}   // V0.6.56 卡片直接篩好
   if(v.startsWith('#')){if(onFC)location.href='/'+v;else location.hash=v.slice(1)}else if(v.startsWith('/'))location.href=v;else if(v==='dzfull'){window.dzFull&&dzFull()}else if(onFC&&typeof go==='function')go(v);else location.href='/fc/?go='+v});
 // 畫到 el；k=vs|h265|fc；15 秒自動更新（離開這頁就停）
 async function dzShow(el,k,apiFn){if(!el)return;const me=el.dataset.dz=String(Math.random());el.innerHTML=`<div data-dzid="${me}" style="padding:30px;opacity:.6">📊 讀取中…</div>`;
