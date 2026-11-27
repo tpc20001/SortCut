@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.54'
+APP_VERSION = '0.6.55'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -8693,7 +8693,7 @@ class NavList(QListWidget):
                                        (26, 'HotZone 圖片分類', '🎨'), (27, '生圖比較', '🖼')]),
               ('HotZone 檔案與硬碟', '#43d9ff', [(11, 'HotZone 總管', '🔥'), (20, 'HotZone 總覽', '📋'), (21, 'HotZone 檔案總管', '🗂'), (22, '搜尋', '🔍'), (23, '空間分析', '📊'),
                                           (28, '影片工具', '🎬'), (29, '傳輸佇列', '⇅'), (30, '資料夾同步', '⇄'), (31, '熱處理', '♨'), (32, '磁碟', '💽')]),
-              ('電腦與背景', '#45d483', [(2, '後台狀態', '🖥'), (42, '整理的後台', '⚙'), (41, '資料分析', '📈'), (58, '備份檢查', '💾'), (73, '多步搬硬碟（D⇄H）', '🚚'), (15, '搬硬碟', '🚚'), (16, '新功能工具箱', '🧰'),
+              ('電腦與背景', '#45d483', [(2, '後台狀態', '🖥'), (42, '整理的後台', '⚙'), (41, '資料分析', '📈'), (58, '備份檢查', '💾'), (73, '多步搬硬碟（D⇄H）', '🚚'), (15, '整顆搬到另一顆', '📦'), (16, '新功能工具箱', '🧰'),
                                     (7, '🧪 實驗工作區', '🧪'), (61, '整理的操作紀錄', '🧾')]),
               ('設定與說明', '#9aa5b3', [(3, '設定：SortCut', '⚙'), (62, '設定：整理（FileCompare）', '🔧'), (33, '設定：HotZone', '🔥'), (5, '版本與更新', '⟳'),
                                      (8, '使用說明', '📖'), (64, '說明：整理', '📖'), (35, '說明：HotZone', '❓'), (4, 'LOG', '📜'), (63, 'LOG：整理', '📜'), (34, 'LOG：HotZone', '📜')])]
