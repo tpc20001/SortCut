@@ -4952,10 +4952,10 @@ class Engine:
                 if self.db.x("UPDATE files SET cv_state=4, cv_err=? WHERE id=? AND cv_state IN (1,2)", (f'⏭ 自動跳過：{why_}', int(fid))): pass
             except Exception: pass
         AJ = list(self.cv_active.items()); rates = {}
-        for fid, J in AJ:
+        for fid, J in AJ:                                                       # 速度用 FFmpeg 的「幾倍速」（跟檔案大小無關；不能用 %／秒，大檔本來就比較慢）
             try:
-                el = now - float(J.get('t0') or now); pct = float(J.get('pct') or 0)
-                if el > 120 and 0 < pct < 100: rates[fid] = pct / el
+                sp = float(str(J.get('speed') or '').strip().rstrip('x') or 0)
+                if sp > 0 and now - float(J.get('t0') or now) > 120 and J.get('phase') in (None, 'enc'): rates[fid] = sp
             except Exception: pass
         for fid, J in AJ:
             try:
@@ -4971,9 +4971,9 @@ class Engine:
                 lim = stuck * (3 if J.get('phase') in ('finish', 'post', 'check') else 1)
                 why = ''
                 if now - wd[1] > lim: why = f'{lim / 60:.0f} 分鐘沒有前進（停在 {sig[0]}%）'
-                elif fid in rates and len(rates) >= 2 and now - float(J.get('t0') or now) > 15 * 60:
+                elif fid in rates and len(rates) >= 2 and now - float(J.get('t0') or now) > 15 * 60 and sig[0] > 0:
                     oth = sorted(v for k, v in rates.items() if k != fid); med = oth[len(oth) // 2]
-                    left = (100 - sig[0]) / max(rates[fid], 1e-9)
+                    el_ = now - float(J.get('t0') or now); left = el_ * (100 - sig[0]) / sig[0]
                     if rates[fid] < med * float(self.cfg.get('cv_slow_x') or 0.15) and left > 2 * 3600:
                         why = f'比其他正在轉的慢太多（照這樣還要 {fmt_t(left)}）'
                 if not why: continue
