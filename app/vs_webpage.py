@@ -1035,12 +1035,12 @@ function rsDrv(j,P){   // V0.5.96 💽 R／V／U 三顆硬碟：工作管理員�
 // V0.6.35 📋 多步搬移（例：D 選的 → G、D 剩下 → H、H 原本 → D、對調代號）
 const MQS={X:'D',Y:'H',Z:'G',only:new Set()};
 function mqPanel(j,D){const Q=j.mq||{},M=j.mqs||{},FZ=j.freeze||{},st=Q.state||'';const opt=v=>D.map(d=>`<option value="${d.X}"${d.X===v?' selected':''}>${d.X}:${d.label?' '+esc(d.label):''}　${fmtB(d.used)}／${fmtB(d.total)}</option>`).join('');
-  let h=`<div class="si rsCardB" style="border:2px solid #2f9bff"><b style="font-size:16px">📋 多步搬移（照順序一步一步搬，空間不夠先停）</b>`;
+  let h=`<div class="si rsCardB" style="border:2px solid #2f9bff"><b style="font-size:16px">📋 多步搬移</b> <small class="mu">照順序一步一步搬，空間不夠先停</small>`;
   if(FZ.on)h+=`<div class="rsStop wait">🧊 <b>${FZ.letters.map(x=>x+':').join(' ')}</b> 冷凍中：SortCut、整理、H265 這幾顆只能看、不能改（搬完或按暫停就解凍）${FZ.blocked?`・擋下 ${FZ.blocked} 次`:''}</div>`;
   if(j.waiting||j.pmsg)h+=`<div class="rsStop wait">⏳ ${esc(j.pmsg||'等轉檔／H265 停好…')}</div>`;
   if(Q.notice)h+=`<div class="rsStop ok">${esc(Q.notice)} <button class="pill" data-mq="mq_notice_ok">知道了</button></div>`;
   if(!st||st==='bad'||st==='done'){
-    h+=`<div class="rsRow"><label>A（要先清空、最後變成另一顆的）</label><select id="mqX">${opt(MQS.X)}</select></div><div class="rsRow"><label>B（A 剩下的搬來這、原本的搬去 A）</label><select id="mqY">${opt(MQS.Y)}</select></div><div class="rsRow"><label>C（A 裡選的資料夾先搬來這）</label><select id="mqZ">${opt(MQS.Z)}</select></div>
+    h+=`<div class="rsRow"><label>A 先清空</label><select id="mqX">${opt(MQS.X)}</select></div><div class="rsRow"><label>B 對調的</label><select id="mqY">${opt(MQS.Y)}</select></div><div class="rsRow"><label>C 先放這</label><select id="mqZ">${opt(MQS.Z)}</select></div>
      <small class="mu">① A 選的資料夾 → C　② A 剩下的 → B　③ B 原本的 → A　④ 到磁碟管理對調 A／B 代號（SortCut 用序號認得，紀錄都在）</small>
      <div><button class="pill" data-mq="mq_scan">🔍 讀 ${MQS.X}: 的資料夾大小</button></div>${M.msg?`<small class="mu">${esc(M.msg)}</small>`:''}`;
     if(M.X===MQS.X&&(M.tops||[]).length){const sel=[...MQS.only];const sb=(M.tops||[]).reduce((a,t)=>a+(MQS.only.has(t.rel)?t.b:0)+(t.kids||[]).reduce((x,k)=>x+(MQS.only.has(k.rel)&&!MQS.only.has(t.rel)?k.b:0),0),0);
@@ -1561,7 +1561,8 @@ async function tLog(){$('#tb').innerHTML=`<div class="tools"><input class="searc
 async function tUpd(){$('#tb').innerHTML=`<div class="panel"><b>目前 V${esc(VER)}</b><p class="mu">選 SC_V….zip（手機下載的也可以）→ 上傳 → 電腦熱更新，程式不用關、背景工作不中斷；手機會自動換新版。</p>
    <input type="file" id="uf" accept=".zip"><div class="row" style="margin-top:8px"><button class="pill acc" id="ub">⬆ 上傳並更新</button><span class="mu" id="um"></span></div></div><div id="cu2" class="panel"><b>☁ 雲端更新（GitHub）</b><div class="mu" id="cum">讀取中…</div><div class="row" style="margin-top:8px;gap:6px"><button class="pill" id="cuc">🔄 檢查</button><button class="pill acc" id="cug" style="display:none">⬇ 更新</button></div><label style="display:block;margin-top:8px"><input type="checkbox" id="cua"> 有新版自動熱更新（30 分鐘看一次，你 5 分鐘沒碰電腦才換）</label></div><div id="cl2" class="panel"><b>最近更新</b><div class="mu">讀取中…</div></div>`;
   const cuShow=r=>{const m=$('#cum');if(!m)return;if(!r){m.textContent='還沒檢查過（電腦開機 1 分鐘後會自己看一次）';return}const I=r.info||{};m.innerHTML=esc(r.message||'')+(r.newer&&(I.notes||[]).length?'<ul style="margin:4px 0;padding-left:18px">'+I.notes.slice(0,6).map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>':'')+(r.newer&&I.need_shell?'<div style="color:#f0ad4e">這版要換 EXE：電腦會先問、關掉再自己打開</div>':'');$('#cug').style.display=r.newer?'':'none'};
-  api('/api/cloud_upd').then(j=>{cuShow(j.r);if($('#cua'))$('#cua').checked=!!j.auto}).catch(()=>{});
+  {const cu=$('#cu2'),p0=cu&&cu.parentNode;if(p0){p0.insertBefore(cu,p0.firstChild);const up=cu.nextElementSibling;if(up&&up!==cu&&up.querySelector('#uf')){const d=document.createElement('details');d.className='panel';d.innerHTML='<summary><b>📦 手動更新（上傳 zip）</b></summary>';while(up.firstChild)d.appendChild(up.firstChild);up.replaceWith(d)}}}   // V0.6.43 雲端更新放最上面、手動上傳收起來
+  api('/api/cloud_upd').then(j=>{if($('#cua'))$('#cua').checked=!!j.auto;cuShow(j.r);$('#cum')&&($('#cum').textContent='檢查中…');return api('/api/cloud_upd',{a:'check'})}).then(j=>j&&cuShow(j)).catch(()=>{});   // V0.6.43 一打開就自己檢查，有新版直接按 ⬇ 更新
   $('#cua').onchange=async e=>{const j=await api('/api/cloud_upd',{a:'auto',on:e.target.checked});toast(j.message||'')};
   $('#cuc').onclick=async()=>{$('#cum').textContent='檢查中…';const j=await api('/api/cloud_upd',{a:'check'});cuShow(j)};
   $('#cug').onclick=async()=>{const j=await api('/api/cloud_upd',{a:'go'});toast(j.message||'',6000)};

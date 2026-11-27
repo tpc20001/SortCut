@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.42'
+APP_VERSION = '0.6.43'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
