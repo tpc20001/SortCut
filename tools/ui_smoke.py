@@ -80,9 +80,8 @@ def main():
     pr = cProfile.Profile(); t0_ = _tt.time(); pr.enable()
     w = A.Main()
     pr.disable(); print(f'  ⏱ 開主視窗 {(_tt.time() - t0_) * 1000:.0f} ms', flush=True)
-    try:
-        so = io.StringIO(); pstats.Stats(pr, stream=so).sort_stats('cumulative').print_stats(25); print('PROFILE-BEGIN\n' + so.getvalue()[-6000:] + '\nPROFILE-END', flush=True)
-    except Exception: pass
+    if os.environ.get('VS_PROFILE'):
+        so = io.StringIO(); pstats.Stats(pr, stream=so).sort_stats('cumulative').print_stats(25); print(so.getvalue()[-6000:], flush=True)
     w.resize(1600, 1000); w.show(); qa._vs_main = w; pump(2.0)
     w.outer.setCurrentIndex(1)
     for pg in list(A.NavList.NAMES):
