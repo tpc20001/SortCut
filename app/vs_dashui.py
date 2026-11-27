@@ -104,7 +104,7 @@ function lvSet(v){LVV=v;document.querySelectorAll('.lvb').forEach(el=>{const on=
   el.querySelector('b').textContent=on?((v.alert?'⚡':'')+'Lv'+v.level):'OFF';el.querySelectorAll('.lvbars i').forEach((x,i)=>x.classList.toggle('on',on&&i<v.level));
   el.title=on?`${v.tk_cfg===false?'🧠 智能調速（不讓 TikLive）':'🤝 讓路'}等級 Lv ${v.level}／10（1＝最讓路、10＝最快）\n${v.why||''}\n點一下看詳細`:'🧠 智能調速：關掉了'});
   const m=document.getElementById('lvm');if(m)lvBody(m.firstElementChild)}
-async function lvTick(){if(!LVF)return;try{const v=await LVF();if(v&&v.level!=null)lvSet(v)}catch(e){}}
+async function lvTick(){if(!LVF||document.hidden)return;try{const v=await LVF();if(v&&v.level!=null)lvSet(v)}catch(e){}}
 function lvStart(fn){LVF=fn;lvTick();setInterval(lvTick,3000)}
 function lvBody(box){const v=LVV||{},U=v.use||{},L=v.L||{},N={cpu:'CPU',gpu:'顯示卡',enc:'編碼 NVENC',dec:'解碼',vram:'顯示卡記憶體'},f=x=>x==null?'—':Math.round(x)+'%';
   const tk=!v.tk?'':v.tk_cfg===false?'⚪ 這台不讓路給 TikLive（另一台電腦用）：只看整台電腦忙不忙來調速':v.tk_link?`✅ TikLive 已連上（${dzE(v.tk_ver||'')}）：錄影 ${v.tk_rec||0} 間、轉檔 ${v.tk_conv||0}、字幕 ${v.tk_stt?'跑':'沒跑'}`:(v.tk?'🟡 TikLive 有在跑，還沒更新到 TK_V1.0.84（用量測的）':'⚪ 這台沒有看到 TikLive');

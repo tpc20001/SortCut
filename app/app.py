@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.60'
+APP_VERSION = '0.6.61'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -9082,6 +9082,23 @@ class WheelBoost(QObject):
 
     def __init__(self):
         super().__init__(); self.an = {}; self.tm = QTimer(self); self.tm.setInterval(12); self.tm.timeout.connect(self._tick)
+        self.tag = id(self); self.hk = QTimer(self); self.hk.setInterval(1500); self.hk.timeout.connect(self.hook_all)
+
+    def hook_all(self, old=None):
+        """把每個捲動框的內容區裝上（新開的頁面／視窗每 1.5 秒補裝一次；裝過的跳過）."""
+        try:
+            for top in QApplication.topLevelWidgets():
+                if not top.isVisible(): continue
+                L = top.findChildren(QAbstractScrollArea)
+                if isinstance(top, QAbstractScrollArea): L.append(top)
+                for a in L:
+                    vp = a.viewport()
+                    if vp is None or vp.property('_vsw') == self.tag: continue
+                    if old is not None:
+                        try: vp.removeEventFilter(old)
+                        except Exception: pass
+                    vp.installEventFilter(self); vp.setProperty('_vsw', self.tag)
+        except Exception: pass
 
     @staticmethod
     def mult():
@@ -9157,7 +9174,11 @@ def wheel_install():
     if old is not None:
         try: app.removeEventFilter(old)
         except Exception: pass
-    W = WheelBoost(); app.installEventFilter(W); app._vs_wheel = W
+    W = WheelBoost(); app._vs_wheel = W                                          # V0.6.61 不再裝在整個程式（每個事件都要繞進 Python，拖慢畫面）：只裝在會捲動的框框上
+    if old is not None:
+        try: old.hk.stop()
+        except Exception: pass
+    W.hook_all(old); W.hk.start()
 
 
 class Main(QMainWindow):

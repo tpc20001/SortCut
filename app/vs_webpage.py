@@ -1397,11 +1397,11 @@ async function updBanner(){try{const j=await api('/api/cloud_upd',undefined,{qui
   const nv=I.version,cmp=(a,b)=>{a=vt(a);b=vt(b);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return (a[i]||0)-(b[i]||0)}return 0};let el=$('#updBan');
   if(!(r.ok&&nv&&cmp(nv,j.cur||VER)>0)||LS.get('updSkip','')===nv){if(el)el.remove();return}
   if(!el){el=document.createElement('div');el.id='updBan';el.style.cssText='display:flex;gap:8px;align-items:center;padding:8px 12px;margin:8px 12px 0;background:linear-gradient(90deg,#173a2a,#14301f);border:1px solid #2f7a4f;border-radius:12px;font-size:14px';const v_=$('#v');if(!v_)return;v_.parentNode.insertBefore(el,v_)}
-  el.innerHTML=`<span style="flex:1">☁ 有新版 <b>V${esc(nv)}</b>${(I.notes||[])[0]?` <span class="mu">${esc(String(I.notes[0]).slice(0,40))}…</span>`:''}</span><button class="pill acc" id="updGo">⬇ 更新</button><button class="pill" id="updNo" title="這版先不要">✕</button>`;
+  el.innerHTML=`<span style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" title="${esc((I.notes||[]).join('\n'))}">☁ 有新版 <b>V${esc(nv)}</b>${(I.notes||[])[0]?` <span class="mu">${esc(String(I.notes[0]).slice(0,60))}</span>`:''}</span><button class="pill acc" id="updGo">⬇ 更新</button><button class="pill" id="updNo" title="這版先不要">✕</button>`;
   $('#updGo').onclick=async()=>{$('#updGo').disabled=true;const x=await api('/api/cloud_upd',{a:'go'});toast(x.message||'',6000);el.remove()};$('#updNo').onclick=()=>{LS.set('updSkip',nv);el.remove()}}catch(e){}}
 setTimeout(updBanner,4000);setInterval(updBanner,10*60*1000);
 // V0.6.52 📋 多步搬移的重要通知（例：① 搬完可以開 FusionStitch、④ 要對調代號）每一頁最上面都看得到
-async function mqBanner(){try{const j=await api(U('/api/rsplit',{lite:1}),undefined,{quiet:true});const Q=j.mq||{};let el=$('#mqBan');
+async function mqBanner(){if(document.hidden)return;try{const j=await api(U('/api/rsplit',{lite:1}),undefined,{quiet:true});const Q=j.mq||{};let el=$('#mqBan');
   const txt=Q.notice||(Q.state==='swap'?'✅ 搬完了！到「🚚 多步搬硬碟」看最後一步（對調代號）':'')||(Q.state==='stopped'&&Q.msg?'⏸ 多步搬移停下來了：'+Q.msg:'');
   if(!txt){if(el)el.remove();return}if(!el){const v_=$('#v');if(!v_)return;el=document.createElement('div');el.id='mqBan';el.style.cssText='display:flex;gap:8px;align-items:center;padding:8px 12px;margin:8px 12px 0;background:#12283a;border:1px solid #2f9bff;border-radius:12px;font-size:14px';v_.parentNode.insertBefore(el,v_)}
   el.innerHTML=`<span style="flex:1">📋 ${esc(txt)}</span><button class="pill" id="mqbGo">看</button>${Q.notice?'<button class="pill" id="mqbOk">知道了</button>':''}`;
@@ -1573,7 +1573,7 @@ async function undoOp(id){if(!confirm('搬回原來的位置？'))return;const j
 let LT;
 async function tLog(){$('#tb').innerHTML=`<div class="tools"><input class="search" id="lq" placeholder="🔍 篩選（空格隔開＝都要有）"><button class="pill" id="lw" style="height:40px">只看警告</button><button class="pill" id="lpz" style="height:40px">⏸</button></div><pre class="log" id="lp" style="margin-top:8px">讀取中…</pre>`;
   let warn=false,pz=false;$('#lw').onclick=e=>{warn=!warn;e.target.classList.toggle('on',warn);load(true)};$('#lpz').onclick=e=>{pz=!pz;e.target.classList.toggle('on',pz);e.target.textContent=pz?'▶':'⏸'};
-  const load=async(force)=>{if(!$('#lp'))return clearInterval(LT);if(pz&&!force)return;const j=await api(U('/api/log',{q:$('#lq').value,warn:warn?1:0}),undefined,{quiet:true});const p=$('#lp');if(!p)return;const atEnd=p.scrollTop+p.clientHeight>=p.scrollHeight-20;p.textContent=(j.lines||[]).join('\n')||'（沒有符合的）';if(atEnd)p.scrollTop=p.scrollHeight};
+  const load=async(force)=>{if(!$('#lp'))return clearInterval(LT);if((pz||document.hidden)&&!force)return;const j=await api(U('/api/log',{q:$('#lq').value,warn:warn?1:0}),undefined,{quiet:true});const p=$('#lp');if(!p)return;const atEnd=p.scrollTop+p.clientHeight>=p.scrollHeight-20;p.textContent=(j.lines||[]).join('\n')||'（沒有符合的）';if(atEnd)p.scrollTop=p.scrollHeight};
   $('#lq').oninput=()=>load(true);clearInterval(LT);LT=setInterval(load,3000);load(true)}
 async function tUpd(){$('#tb').innerHTML=`<div class="panel"><b>目前 V${esc(VER)}</b><p class="mu">選 SC_V….zip（手機下載的也可以）→ 上傳 → 電腦熱更新，程式不用關、背景工作不中斷；手機會自動換新版。</p>
    <input type="file" id="uf" accept=".zip"><div class="row" style="margin-top:8px"><button class="pill acc" id="ub">⬆ 上傳並更新</button><span class="mu" id="um"></span></div></div><div id="cu2" class="panel"><b>☁ 雲端更新（GitHub）</b><div class="mu" id="cum">讀取中…</div><div class="row" style="margin-top:8px;gap:6px"><button class="pill" id="cuc">🔄 檢查</button><button class="pill acc" id="cug" style="display:none">⬇ 更新</button></div><label style="display:block;margin-top:8px"><input type="checkbox" id="cua"> 有新版自動熱更新（30 分鐘看一次，你 5 分鐘沒碰電腦才換）</label></div><div id="cl2" class="panel"><b>最近更新</b><div class="mu">讀取中…</div></div>`;
@@ -1695,7 +1695,7 @@ function bindSet(sb){
     const xa=e.target.closest('[data-xall]');if(xa){const hide=xa.dataset.xall==='all'?[]:SETD.exts.all.filter(z=>z!=='.mp4'&&z!=='.m4v');const r=await api('/api/settings',{k:'hide_exts',v:hide});if(r.ok){SETD.exts.hide=r.v;setCat('ext');toast('✔ 已儲存')}}};
   sb.onchange=async e=>{const t=e.target;if(t.dataset.lx){const r=await api('/api/new',{a:'lab_set',k:t.dataset.lx,v:t.value});toast(r.ok?'✔ 已儲存':(r.message||'沒存到'));if(r.ok&&r.v!=null&&t.tagName==='INPUT')t.value=r.v;return}if(t.dataset.ui==='tcols'){LS.set('tcols',Math.max(2,Math.min(30,+t.value||4)));toast('✔ 已儲存');return}if(!t.dataset.k)return;let v=t.type==='checkbox'?t.checked:t.value;if(t.type==='number')v=+v;
     const r=await api('/api/settings',{k:t.dataset.k,v});toast(r.ok?'✔ 已儲存':(r.message||'沒存到'));if(r.ok&&t.type==='number'&&r.v!=null)t.value=r.v;const s=SETD.settings.concat(SETD.lab).find(x=>x.k===t.dataset.k);if(r.ok&&s)s.v=r.v!=null?r.v:v}}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){poll();try{lvTick()}catch(e){}}});
 boot();
 </script></body></html>
 """

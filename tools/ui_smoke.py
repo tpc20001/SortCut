@@ -95,6 +95,12 @@ def main():
         for i in range(w.conv.tabs.count()): step(f'轉檔分頁 {i}', lambda i=i: (w.conv.tabs.setCurrentIndex(i), pump(0.4), shot(w, f'conv{i}')))
     for nm in ('explore',):
         if hasattr(w, nm): step(f'{nm}', lambda nm=nm: getattr(w, nm).refresh() if hasattr(getattr(w, nm), 'refresh') else None)
+    def wh():
+        from PySide6.QtWidgets import QAbstractScrollArea
+        pump(1.8); n = sum(1 for a in w.findChildren(QAbstractScrollArea) if a.viewport() is not None and a.viewport().property('_vsw'))
+        print(f'  🖱 滾輪裝到 {n} 個捲動框', flush=True)
+        if not n: raise RuntimeError('滾輪沒有裝到任何捲動框')
+    step('滾輪加速', wh)
     pump(3.0)
     try:
         w.quitting = True; w.close(); pump(0.5); A.ENG.shutdown() if hasattr(A.ENG, 'shutdown') else None
