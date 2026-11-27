@@ -76,7 +76,14 @@ def main():
                          rnd.choice(['h264', 'hevc']), rnd.choice(['', '', 'S', 'A', 'E', 'F']), rnd.randint(30, 4000)))
         A.ENG.db.con.executemany("INSERT INTO files(path,root,folder,name,ext,size,mtime,vcodec,grade,probed,has_v,dur) VALUES(?,?,?,?,?,?,?,?,?,1,1,?)", rows); A.ENG.db.con.commit()
     except Exception as ex: print('  (假資料失敗)', ex, flush=True)
-    w = A.Main(); w.resize(1600, 1000); w.show(); qa._vs_main = w; pump(2.0)
+    import cProfile, pstats, io, time as _tt
+    pr = cProfile.Profile(); t0_ = _tt.time(); pr.enable()
+    w = A.Main()
+    pr.disable(); print(f'  ⏱ 開主視窗 {(_tt.time() - t0_) * 1000:.0f} ms', flush=True)
+    try:
+        so = io.StringIO(); pstats.Stats(pr, stream=so).sort_stats('cumulative').print_stats(25); print('PROFILE-BEGIN\n' + so.getvalue()[-6000:] + '\nPROFILE-END', flush=True)
+    except Exception: pass
+    w.resize(1600, 1000); w.show(); qa._vs_main = w; pump(2.0)
     w.outer.setCurrentIndex(1)
     for pg in list(A.NavList.NAMES):
         step(f'頁面 {pg} {A.NavList.NAMES[pg][1]}', lambda pg=pg: (w._page(pg), pump(0.6), shot(w, f'p{pg:02d}')))
