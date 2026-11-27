@@ -104,13 +104,6 @@ def vkey(v):
     return tuple(int(x) for x in re.findall(r'\d+', str(v or ''))) or (0,)
 
 
-def next_version(v):
-    """版本規則：0.1.01 → 0.1.02 … 0.1.99 → 0.2.01（最後一段兩位數、不用 00）."""
-    a = list(vkey(v)) + [0, 0, 0]; ma, mi, pa = a[0], a[1], a[2]
-    pa += 1
-    if pa > 99: mi += 1; pa = 1
-    return f'{ma}.{mi}.{pa:02d}'
-
 
 def run(cmd, timeout=60, prio='normal'):
     """跑外部程式（不開黑視窗）：回傳 (returncode, stdout, stderr)."""

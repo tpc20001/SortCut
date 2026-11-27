@@ -577,12 +577,6 @@ def safe_regex(val, flags):
     except re.error as e: raise QueryError(f'正規表達式寫錯了（第 {e.pos + 1 if e.pos is not None else "?"} 個字附近）：{RX_ERR.get(e.msg.split(" at ")[0], e.msg)}')
 
 
-def wild_to_rx(s):
-    out = ''
-    for ch in s:
-        out += '.*' if ch == '*' else '.' if ch == '?' else re.escape(ch)
-    return out
-
 
 def tokenize(q):
     """Words separated by spaces; "quoted" keeps spaces; returns list of raw tokens."""
@@ -686,9 +680,6 @@ class Searcher:
         self.vi = vi; self.groups = groups; self.scope = scope_ids
         self._sets = {}; self.exact = ()               # groups the anchor already proved for every candidate
 
-    def _path_l(self, i):
-        p = self.vi.path(i)
-        return p if p is None else p.lower()
 
     def term_ok(self, t: Term, i):
         vi = self.vi; fl = vi.flags[i]

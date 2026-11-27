@@ -425,13 +425,3 @@ def mft_zone_files(vol, zone_end, stop=None, chunk=8 * 1024 * 1024, pace=None):
     return out
 
 
-def ntfs_available(letter: str) -> tuple[bool, str]:
-    if not IS_WIN: return False, '不是 Windows'
-    if not W.is_admin(): return False, '需要系統管理員權限'
-    try:
-        with NtfsVolume(letter) as v:
-            return True, ''
-    except NtfsError as e:
-        return False, str(e)
-    except Exception as e:
-        return False, str(e)

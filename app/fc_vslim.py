@@ -192,10 +192,6 @@ class Slim:
             except Exception: pass
         return None
 
-    def _args(self, enc, q):
-        """舊的固定畫質（hq／std／small）."""
-        _n, crf, cq = QUAL.get(q, QUAL['std'])
-        return self.vargs(enc, crf if enc == 'libx265' else cq, 0, False)[0]['v']
 
     def vargs(self, enc, q, cap, v10):
         """跟 VS 一樣的壓縮參數；回傳幾種做法（前面的失敗就換下一種）：[{'pre','v','name'}]."""

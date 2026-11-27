@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.40'
+APP_VERSION = '0.6.41'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -2400,11 +2400,6 @@ class BrowsePage(QWidget):
         bg(lambda: ENG.set_flag(fid, grade=k), lambda _r: (self._upd_row(fid, grade=k), self.load_chips())); self.win.msg(f'{self.cur["name"]} → {k + "（" + GN[k] + "）" if k else "未分級"}')
         if k and (ENG.cfg.get('lab') or {}).get('auto_next'): QTimer.singleShot(120, lambda: self.next_ungraded(1))      # V0.2.08 直接跳下一部「還沒分級」的
 
-    def next_item(self):
-        """🧪 分級後自動跳下一部：清單裡的下一張（到最後就停）."""
-        r = self.lst.currentRow()
-        if 0 <= r < self.lst.count() - 1: self.lst.setCurrentRow(r + 1); self.lst.scrollToItem(self.lst.item(r + 1)); self._focus_pos()
-        else: self.win.msg('已經是清單最後一部了')
 
     def refresh_people_filter(self):
         """👤 篩選選單後面加「取了名字的人」."""
@@ -3481,9 +3476,6 @@ class ConvPage(QWidget):
         for i, r in enumerate(self.vis):
             if fn(r): self.tb.selectRow(i)
 
-    def _check_rows(self, rows, on):
-        for i in rows:
-            if on: self.tb.selectRow(i)
 
     def go(self):
         ids = self.checked()
@@ -3511,7 +3503,6 @@ class ConvPage(QWidget):
         path = r.get('path') or (ENG.file(r['id']) or {}).get('path')
         p_ = Player(self.win, path, 0, r.get('name') or Path(path).name, fid=r['id']); p_.setAttribute(Qt.WA_DeleteOnClose); p_.show()
 
-    def _ratio(self, R): self.ratio = R
 
     # ---------- ⚙ 轉檔中
     def _tab_run(self):

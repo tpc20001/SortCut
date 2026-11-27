@@ -1132,12 +1132,6 @@ class SimVolume:
     def _free(self, lcn, n):
         return all(not (self.bm[c >> 3] >> (c & 7)) & 1 for c in range(lcn, lcn + n))
 
-    def add_file(self, path, runs):
-        vcn = 0; ext = []
-        for lcn, n in runs:
-            assert self._free(lcn, n), (path, lcn, n)
-            self._set(lcn, n, 1); ext.append([vcn, lcn, n]); vcn += n
-        self.files[path] = ext
 
     map_ok = False                                   # tests switch the MFT zone map on / off
 
@@ -1191,11 +1185,3 @@ class SimVolume:
         if self.speed: time.sleep(n * self.cluster * 2 / self.speed)
         return True, 0
 
-    def used_by(self):
-        owner = {}
-        for p, ext in self.files.items():
-            for v, l, n in ext:
-                for c in range(l, l + n):
-                    assert c not in owner, f'overlap at {c}: {p} / {owner[c]}'
-                    owner[c] = p
-        return owner

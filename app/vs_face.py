@@ -274,12 +274,6 @@ CREATE TABLE IF NOT EXISTS person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEX
             return p
         finally: c.close()
 
-    def face_geom(self, ids):
-        """臉的位置（給畫面切圖用）＋那部影片的預覽圖排法."""
-        c = self.con()
-        try: F = [self._face_dict(r) for r in c.execute(f'SELECT id, file_id, k, x, y, w, h, t FROM face WHERE id IN ({",".join(str(int(i)) for i in ids) or "-1"})')]
-        finally: c.close()
-        return F
 
     def rename(self, pid, name):
         name = re.sub(r'[\\/:*?"<>|]', '', str(name or '')).strip()[:40]
