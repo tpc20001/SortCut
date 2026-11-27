@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.45'
+APP_VERSION = '0.6.46'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -10095,6 +10095,10 @@ class Main(QMainWindow):
 
     def _page(self, i):
         i = int(i)
+        if i == 5 and time.time() - float(getattr(self, '_cloud_t_open', 0) or 0) > 600:   # V0.6.46 打開「版本與更新」就自己看一次雲端（10 分鐘內不重看）
+            self._cloud_t_open = time.time()
+            try: QTimer.singleShot(300, lambda: self._cloud_check(False))
+            except Exception: pass
         if i == 10: i = 44                                                       # V0.5.00 舊的「🗂 審核」→ 🗂 整理的「影片快速分類」
         if i == 9: i = 40                                                        # 👤 人物 拿掉了 → 整理總覽
         if i == 66 and hasattr(self, 'browse'):                                  # V0.5.42 ④ 的「SortCut 讀不了的影片」＝檔案總管篩「⚠ 讀不了」（全部資料夾）
