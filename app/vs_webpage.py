@@ -1582,7 +1582,7 @@ async function logout(){if(!confirm('登出這支手機？下次要重新輸入 
 // ---------------------------------------------------------------- 設定（照 TikLive：左邊分類＋搜尋、右邊一條一條）
 const SCAT=[['look','🎨','外觀','主題、字體、一列幾張','phone'],['about','📱','手機網頁','版本、連線、登出','phone'],['lib','💽','影片庫','硬碟、排除、分類、備份、USB','pc'],['th','🖼','預覽圖','背景做、幾部同時、間隔','pc'],['cut','✂','初剪','分段／合併、免轉檔','pc'],['conv','🔁','轉檔','編碼器、畫質、轉好之後','pc'],
   ['ext','🗂','檔案類型','檔案總管列出哪些格式','pc'],['misc','⚙','其他','這台電腦的名稱、歸檔、備份、每日目標','pc'],['lab','🧪','實驗功能','開了才有的試用功能','pc']];
-const SKEYS={th:['th_on','th_n','th_step','th_prio','probe_n','hdd_n','scan_on_start','grid_sec'],cut:['cut_merge','cut_mode'],conv:['cv_mode','cv_target','cv_enc','cv_q','cv_res','cv_cap','cv_n','cv_per_disk','cv_after','cv_verify'],misc:['pc_name','pc_color','arch_f_trash','db_backup','daily_goal_n']};
+const SKEYS={th:['th_on','th_n','th_step','th_prio','probe_n','hdd_n','scan_on_start','grid_sec'],cut:['cut_merge','cut_mode'],conv:['cv_autoskip','cv_stuck_min','cv_mode','cv_target','cv_enc','cv_q','cv_res','cv_cap','cv_n','cv_per_disk','cv_after','cv_verify'],misc:['pc_name','pc_color','arch_f_trash','db_backup','daily_goal_n']};
 let SETD=null;
 async function viewSet(){const gen=S.gen;
   V().innerHTML=`<div class="s2"><aside class="scat" id="scat"></aside><div class="sbody" id="sbody"><div class="empty">讀取中…</div></div></div>`;

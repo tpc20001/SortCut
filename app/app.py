@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.50'
+APP_VERSION = '0.6.51'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -3530,6 +3530,11 @@ class ConvPage(QWidget):
         gl.addWidget(QLabel('壓縮'), 0, 0); gl.addWidget(self.enc, 0, 1); gl.addWidget(QLabel('畫質'), 0, 2); gl.addWidget(self.qual, 0, 3); gl.addWidget(QLabel('同時'), 0, 4); gl.addWidget(flow_row([self.n, self.npd]), 0, 5)
         gl.addWidget(QLabel('解析度'), 1, 0); gl.addWidget(self.res, 1, 1); gl.addWidget(QLabel('位元率上限'), 1, 2); gl.addWidget(self.cap, 1, 3, 1, 3)
         gl.addWidget(QLabel('轉好後'), 2, 0); gl.addWidget(self.after, 2, 1, 1, 3); gl.addWidget(self.verify, 2, 4, 1, 2)
+        self.c_skip = QCheckBox('⏭ 卡住／太慢自動跳過（放到「失敗」，可以重試）'); self.c_skip.setChecked(ENG.cfg.get('cv_autoskip') is not False)   # V0.6.51
+        self.c_skip.toggled.connect(lambda on: ENG.cfg.set('cv_autoskip', bool(on)))
+        self.s_stuck = QSpinBox(); self.s_stuck.setRange(3, 120); self.s_stuck.setPrefix('幾分鐘沒前進算卡住：'); self.s_stuck.setSuffix(' 分'); self.s_stuck.setValue(int(ENG.cfg.get('cv_stuck_min') or 10))
+        self.s_stuck.valueChanged.connect(lambda x: ENG.cfg.set('cv_stuck_min', int(x)))
+        gl.addWidget(self.c_skip, 5, 0, 1, 4); gl.addWidget(self.s_stuck, 5, 4, 1, 2)
         gl.addWidget(QLabel('轉檔方式'), 4, 0); gl.addWidget(self.mode, 4, 1, 1, 3); gl.addWidget(self.tgt, 4, 4, 1, 2)
         self.lsum = QPushButton('📈 滾動式參數：讀取中…'); self.lsum.setObjectName('pill'); self.lsum.setToolTip('點一下看每一類的經驗、用哪種方式、抽查結果'); self.lsum.clicked.connect(lambda: self.win.nav.setCurrentRow(14))
         self.gpu = QLabel('顯示卡檢查中…'); self.gpu.setWordWrap(True); self.b_gpu = QPushButton('🔄 重新檢查顯示卡'); self.b_gd = QPushButton('詳細')

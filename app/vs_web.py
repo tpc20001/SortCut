@@ -1172,6 +1172,8 @@ class WebServer:
         return jresp({'ok': True, 'lines': L[-400:]})
 
     SETTINGS = [  # (鍵, 名稱, 種類, 選項)
+        ('cv_autoskip', '⏭ 轉檔卡住／太慢自動跳過（放到「失敗」，可以重試）', 'bool', None),                          # V0.6.51
+        ('cv_stuck_min', '⏭ 幾分鐘沒前進算卡住', 'choice', [(5, '5 分鐘'), (10, '10 分鐘（建議）'), (20, '20 分鐘'), (30, '30 分鐘'), (60, '60 分鐘')]),
         ('th_on', '背景做預覽圖', 'bool', None), ('th_n', '預覽圖同時做幾部', 'int', (1, 8)), ('th_step', '預覽圖每幾秒一張（新做的才算）', 'choice', [(1, '每 1 秒'), (2, '每 2 秒'), (3, '每 3 秒'), (5, '每 5 秒'), (10, '每 10 秒')]),
         ('th_prio', '預覽圖優先權', 'choice', [('idle', '最低（不影響你用電腦）'), ('below', '低'), ('normal', '一般')]), ('probe_n', '讀影片資訊同時幾部', 'int', (1, 4)),
         ('scan_on_start', '打開程式時自動掃描', 'bool', None), ('hdd_n', 'HDD 同一顆一次幾部預覽圖', 'int', (1, 4)),
@@ -1212,7 +1214,9 @@ class WebServer:
             if k in ('pc_name', 'pc_color'):
                 self._icons = {}; self._ui(lambda: getattr(self.W(), 'apply_pc', lambda: None)())
             return jresp({'ok': True, 'v': v})
-        S = [{'k': k, 'name': n, 'type': t, 'opt': o, 'v': (E.pc_name() if k == 'pc_name' else E.pc_color() if k == 'pc_color' else E.cfg.get(k)) if hasattr(E, 'pc_name') else E.cfg.get(k)} for k, n, t, o in self.SETTINGS]
+        DEF_ = {'cv_autoskip': True, 'cv_stuck_min': 10}                          # V0.6.51 沒設過＝預設值
+        g_ = lambda k: E.cfg.get(k) if E.cfg.get(k) is not None else DEF_.get(k)
+        S = [{'k': k, 'name': n, 'type': t, 'opt': o, 'v': (E.pc_name() if k == 'pc_name' else E.pc_color() if k == 'pc_color' else g_(k)) if hasattr(E, 'pc_name') else g_(k)} for k, n, t, o in self.SETTINGS]
         try: ND = {k: d for k, _n, d, _v in getattr(self.app_mod(), 'NEW_LABS', [])}        # V0.2.46 手機也看得到新功能的說明
         except Exception: ND = {}
         L = [{'k': 'lab:' + k, 'name': n, 'ver': ver, 'v': bool((E.cfg.get('lab') or {}).get(k)), 'desc': ND.get(k, ''), 'new': k in ND} for k, n, ver in self.lab_list]
