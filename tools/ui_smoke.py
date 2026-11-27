@@ -58,6 +58,7 @@ def step(name, fn):
 def main():
     import faulthandler
     faulthandler.dump_traceback_later(300, exit=True)                           # 卡住 5 分鐘：印出卡在哪一行再結束（看 LOG 就知道）
+    if os.name == 'nt' and not os.environ.get('QT_QPA_FONTDIR'): os.environ['QT_QPA_FONTDIR'] = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts')   # 截圖要有中文字
     from PySide6.QtWidgets import QApplication
     no_modal()
     import app as A
