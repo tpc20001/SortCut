@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.63'
+APP_VERSION = '0.6.64'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -4705,7 +4705,8 @@ class RSplitPage(QWidget):
             if j_ >= 0 and not self.ser.view().isVisible(): self.ser.setCurrentIndex(j_)
             B = A.get('busy') or {}
             self.pinf.setText((f"現在用 <b>{A.get('pct')}%</b>・{_hesc(A.get('why') or '')}・{'一次寫一顆（U、V 輪流）' if A.get('serial') else '兩顆同時寫（R 同時讀兩個檔）'}" if run else
-                               ('🧠 智能：自己看 TikLive、CPU、溫度、硬碟忙不忙來調' if A.get('smart') else '✋ 手動：照拉桿的百分比（TikLive 要用時一樣會自動讓）'))
+                               ((('🧠 智能：自己看 TikLive、CPU、溫度、硬碟忙不忙來調' if A.get('smart') else '✋ 手動：照拉桿的百分比（TikLive 要用時一樣會自動讓）') if _tk_seen() else
+                                 ('🧠 智能：自己看 CPU、溫度、硬碟忙不忙來調' if A.get('smart') else '✋ 手動：照拉桿的百分比'))))
                               + (f"・🌡 {A['temp']:.0f}°C" if A.get('temp') else '') + ('・💽 ' + ' '.join(f'{x}: {b}%' for x, b in B.items()) if B else '')
                               + ''.join(f"<br><small>{_hesc(x)}</small>" for x in (A.get('log') or [])[:3]))
             self.gf.setVisible(busy)
@@ -9164,6 +9165,13 @@ def timed_box(parent, title, text, secs=10):
             QTimer.singleShot(1000, tick)
         b.setText(f'確定（{left[0]} 秒後自動關閉）'); mb.show(); QTimer.singleShot(1000, tick); return mb
     except Exception: return None
+
+
+def _tk_seen():
+    """V0.6.64 這台有沒有看到 TikLive（沒有就不寫 TikLive 字樣）."""
+    try:
+        import vs_yield; return bool((vs_yield.view() or {}).get('tk'))
+    except Exception: return False
 
 
 def wheel_install():
