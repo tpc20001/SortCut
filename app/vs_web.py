@@ -645,7 +645,7 @@ class WebServer:
             self.E().log.err('📊 總覽'); return jresp({'ok': False, 'message': f'總覽讀不到：{ex}'})
 
     def api_state(self, req):
-        E = self.E(); E.info_c['t'] = 0; I = E.info(); s = E.scan_st; J = E.jobs_view()
+        E = self.E(); I = E.info(); s = E.scan_st; J = E.jobs_view()           # V0.6.67 不再每次強制重算（電腦、手機、網頁版一起看時共用同一份）
         th = [{'id': k, 'name': Path(v.get('path') or '').name, 't0': v.get('t0'), 'pct': v.get('pct')} for k, v in list(E.th_active.items())]
         L = {k: bool((E.cfg.get('lab') or {}).get(k)) for k, _n, _v in self.lab_list}
         return jresp({'ok': True, 'ver': self.version, 'time': time.strftime('%H:%M:%S'), 'info': I, 'scan': {'running': s.get('running'), 'n': s.get('n'), 'cur': s.get('cur', '')},

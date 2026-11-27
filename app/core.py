@@ -6410,7 +6410,7 @@ class Engine:
 
     def info(self):
         c = self.info_c
-        if time.time() - c['t'] < 2: return c['v']
+        if time.time() - c['t'] < 4: return c['v']                              # V0.6.67 4 秒內重用（分級、轉檔這些有變動時會馬上歸零重算）
         q = lambda s, a=(): (self.db.one(s, a) or [0])[0] or 0
         lt = time.localtime(); day0 = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
         try:                                                                    # V0.6.62 15 次全表掃描 → 1 次（大影片庫手機每 3 秒問一次，省很多）
@@ -7540,6 +7540,7 @@ class Engine:
 
     def set_flags(self, ids, _stamp=True, **kw):
         """一次改很多部（分級、收藏記號…）."""
+        if 'grade' in kw: self.info_c['t'] = 0                                  # V0.6.67 分級數字馬上跟著變
         ok = {k: v for k, v in kw.items() if k in ('fav', 'grade', 'note', 'viewed', 'tag', 'card_k', 'last_pos')}; ids = [int(i) for i in ids]
         if 'grade' in ok: ok['grade_t'] = time.time() if _stamp else 0                           # 什麼時候分級的（🧪 每日整理目標用）
         try:                                                                    # V0.3.36 🤖 分級建議準不準：你自己分的時候對照一下
