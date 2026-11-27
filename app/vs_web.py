@@ -659,7 +659,15 @@ class WebServer:
                       'still_left': (E.still_left_c() if ((E.cfg.get('lab') or {}).get('still_scan') or (E.cfg.get('lab') or {}).get('smart_card')) else None),
                       'auto_rule': getattr(E, '_ar_last', None),
                       'theme_hours': [int((E.cfg.get('lab') or {}).get('theme_from', 7)), int((E.cfg.get('lab') or {}).get('theme_to', 19))],
-                      'copy': (E.copy_view() if (E.cfg.get('lab') or {}).get('copy_to') and hasattr(E, 'copy_view') else None)})
+                      'copy': (E.copy_view() if (E.cfg.get('lab') or {}).get('copy_to') and hasattr(E, 'copy_view') else None), 'hz_on': self._hz_on(E)})
+
+    @staticmethod
+    def _hz_on(E):
+        """V0.6.69 這台有沒有設定 HotZone（沒有＝手機工具也不列 HotZone，跟電腦選單一樣）."""
+        try:
+            if E.cfg.get('nav_show_hz') is True: return True
+            H = getattr(E, 'hz', None); return bool(H is not None and (H.cfg() or {}).get('root'))
+        except Exception: return True
 
     def api_folders(self, req):
         E = self.E(); F = E.folders(); roots = [str(r) for r in E.cfg.get('roots') or []]
