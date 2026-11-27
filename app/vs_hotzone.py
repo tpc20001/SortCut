@@ -50,6 +50,16 @@ def _mapped_drive(path):
     return ''
 
 
+_LOC_OP = None
+
+
+def _local_opener():
+    """V0.6.68 連本機 HotZone 用的同一個 opener（之前每次都重建，連帶每次重新載入 HTTPS 憑證，很耗 CPU）."""
+    global _LOC_OP
+    if _LOC_OP is None: _LOC_OP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return _LOC_OP
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k): return None
 
@@ -186,7 +196,7 @@ class HotZoneManager:
         base = int((self.E.cfg.get('hz') or {}).get('port') or 0) or self._port_guess()
         for port in [base] + [p for p in range(8765, 8771) if p != base]:
             try:
-                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(f'http://127.0.0.1:{port}/api/ping', timeout=0.8) as r:
+                with _local_opener().open(f'http://127.0.0.1:{port}/api/ping', timeout=0.8) as r:
                     d = json.loads(r.read().decode('utf-8'))
                 if d.get('app') == 'HotZone FM':
                     d['port'] = port
@@ -226,7 +236,7 @@ class HotZoneManager:
             rq = urllib.request.Request(f'http://127.0.0.1:{port}{path}', data=data, method='POST' if body is not None else 'GET',
                                         headers={'Cookie': self.cookie, 'X-HZ': '1', 'Content-Type': 'application/json'})
             try:
-                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(rq, timeout=timeout) as r:
+                with _local_opener().open(rq, timeout=timeout) as r:
                     return json.loads(r.read().decode('utf-8') or '{}')
             except urllib.error.HTTPError as e:
                 if e.code in (401, 403) and attempt == 0: self.cookie = ''; continue
@@ -741,6 +751,7 @@ class HotZoneManager:
     def _loop(self):
         t_auto = 0
         while self.alive:
+            pg = None
             try:
                 if self.installing is not None and self.installing.poll() is not None:
                     self.installing = None; self.check_env()
@@ -761,7 +772,8 @@ class HotZoneManager:
             except Exception:
                 try: self.E.log.err('🔥 HotZone 背景')
                 except Exception: pass
-            for _ in range(6):
+            miss_ = 0 if pg else min(10, getattr(self, '_miss', 0) + 1); self._miss = miss_   # V0.6.68 HotZone 沒在跑：越久越少問（最多 30 秒一次）
+            for _ in range(6 * max(1, miss_)):
                 if not self.alive: return
                 time.sleep(0.5)
 

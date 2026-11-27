@@ -3156,6 +3156,7 @@ class Engine:
         with self.lock:
             if fid in self.th_front: self.th_front.remove(fid)
             self.th_front.appendleft(int(fid))
+        self._th_kick()
 
     def _thumb_next(self):
         """下一部：先看「⚡ 先做這部」，再照你正在看的資料夾 → 資料夾 → 檔名的順序（同一顆 HDD 上就是照位置順序讀）。
@@ -3178,6 +3179,7 @@ class Engine:
         return None
 
     def _thumb_boss(self):
+        idle = 0
         while self.alive():
             try:
                 n = max(1, min(8, int(self.cfg.get('th_n') or 2))); bz = self.boosted()
@@ -3190,8 +3192,9 @@ class Engine:
                         self.th_active[fid] = {'id': fid, 'name': Path(r['path']).name, 'path': r['path'], 'lane': self.lane_of(r['path']), 'pct': 0, 't0': time.time(), 'proc': None,
                                                'precise': fid in self.th_precise}; self.th_precise.discard(fid); self.bg_mark('thumb', Path(r['path']).name)
                         threading.Thread(target=self._thumb_job, args=(fid, r['path'], float(r['dur'] or 0)), name='VsThumb', daemon=True).start()
-                        continue
-                time.sleep(1.0)
+                        idle = 0; continue
+                    idle += 1                                                    # V0.6.68 沒得做（硬碟忙、離線）：越等越久（最多 6 秒），做完一部會馬上叫醒；之前每秒排序整個清單一次
+                ev = self.__dict__.setdefault('_th_ev', threading.Event()); ev.wait(min(6.0, 1.0 + idle)); ev.clear()
             except Exception:
                 self.log.err('thumb boss'); time.sleep(5)
 
@@ -3444,7 +3447,12 @@ class Engine:
                 except Exception: pass
                 self.done(t, 'fail', why_[-200:]); self.log.w(f'預覽圖失敗：{path}：{why_}' + (f'\n　指令：{cmd_[:400]}' if cmd_ else ''))
         finally:
-            self.th_active.pop(fid, None)
+            self.th_active.pop(fid, None); self._th_kick()
+
+    def _th_kick(self):
+        """V0.6.68 叫醒預覽圖總管（做完一部、有人要先做哪部時，不用等它下一輪）."""
+        try: self.__dict__.setdefault('_th_ev', threading.Event()).set()
+        except Exception: pass
 
     def thumb_cancel(self, fid, skip=False):
         J = self.th_active.get(int(fid))
