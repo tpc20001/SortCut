@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.44'
+APP_VERSION = '0.6.45'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -4432,9 +4432,7 @@ class RSplitPage(QWidget):
     def __init__(self, win):
         super().__init__(); self.win = win; self.arm = 0; self._busy = False
         v = QVBoxLayout(self); v.setContentsMargins(10, 10, 10, 10)
-        t = QLabel('🗄 R 碟清空搬移（已封存）'); t.setObjectName('title'); t.setStyleSheet('color:#ff5252;font-size:20px;font-weight:700'); v.addWidget(t)
-        ar = QLabel('🗄 這個功能已經封存：不在左邊選單裡，避免誤按。要再用：電腦按 <b>Ctrl+Shift+R</b>；手機：⚙ 設定 → 📱 手機網頁 最下面「🗄 封存的功能」。搬移紀錄和設定都還在。')
-        ar.setWordWrap(True); ar.setStyleSheet('background:#2a2410;border:1px solid #f0ad4e;border-radius:8px;padding:8px;color:#f0c27a'); v.addWidget(ar)
+        t = QLabel('🚚 多步搬硬碟'); t.setObjectName('title'); t.setStyleSheet('color:#4dc9ff;font-size:20px;font-weight:700'); v.addWidget(t)
         w = QLabel('把來源硬碟上<b>所有的檔案</b>分到兩顆硬碟（位置不變，只換磁碟代號：R:\\A\\b.mp4 → S:\\A\\b.mp4）。<br>'
                    '• 開始後 SortCut 和整理的背景工作都先停（不讀 R），搬完自動恢復。<br>'
                    '• 每個檔：<b>複製 → 寫進硬碟 → 確認</b>（⚡ 快速：大小一樣、抽查 5 段一樣；🔎 完整：整檔讀回比指紋），確認過才刪 R 上的那個檔；不一樣的留在 R、下面列清單。<br>'
@@ -6579,7 +6577,10 @@ class ExplorePage(QWidget):
         self.tabs.addTab(self.tw_hot, '💡 最值得轉的')
         self.mix = QLabel(); self.mix.setTextFormat(Qt.RichText); self.mix.setWordWrap(True); self.mix.setAlignment(Qt.AlignTop | Qt.AlignLeft); self.mix.setMargin(10)
         self.tabs.addTab(scroll_wrap(self.mix), '🎞 編碼／格式')
-        sp.addWidget(self.tabs); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1)
+        sp.addWidget(self.tabs); sp.setStretchFactor(0, 2); sp.setStretchFactor(1, 3); v.addWidget(sp, 1); sp.setSizes([340, 520])     # V0.6.45 方塊圖不要吃掉整頁
+        for t_ in (self.tw, self.tw_big, self.tw_hot):                          # V0.6.45 第一欄（名稱）撐開，數字欄靠在一起
+            try: h_ = t_.header(); h_.setStretchLastSection(False); h_.setSectionResizeMode(0, QHeaderView.Stretch)
+            except Exception: pass
         for ks, fn in (('Backspace', self.up), ('Alt+Up', self.up), ('F5', lambda: (ENG.__dict__.pop('_exp_cache', None), self.refresh())), ('Ctrl+F', lambda: (self.q.setFocus(), self.q.selectAll()))):   # V0.6.26 鍵盤
             sc = QShortcut(QKeySequence(ks), self); sc.setContext(Qt.WidgetWithChildrenShortcut); sc.activated.connect(lambda fn=fn, bk=(ks == 'Backspace'): (None if (bk and self.q.hasFocus()) else fn()))
         self.tw.installEventFilter(self)
@@ -10109,7 +10110,7 @@ class Main(QMainWindow):
         if i == 73 and hasattr(self, 'rsp'):                                     # V0.5.85 🚚 R 碟清空搬移（V0.6.06 封存：只能用 Ctrl+Shift+R 打開，不記成「上次停在」）
             self.stack.setCurrentIndex(19)
             if self._cover_ready and self.outer.currentIndex() == 0: self.outer.setCurrentIndex(1)
-            try: self.ptitle.setText('🗄 R 碟清空搬移（封存）')
+            try: self.ptitle.setText('🚚 多步搬硬碟')
             except Exception: pass
             ENG.log.w('畫面：切到「🚚 R 碟清空搬移」'); self.rsp.refresh(); return
         if i == 74 and hasattr(self, 'explore'):                                 # V0.6.19 🗺 檔案總覽
