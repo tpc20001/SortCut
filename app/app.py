@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.53'
+APP_VERSION = '0.6.54'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6250,7 +6250,6 @@ class LvBadge(QWidget):
         old = (self.v.get('level'), self.v.get('on'), self.v.get('tk'), bool(self.v.get('alert'))); self.v = v
         tip = [f"🤝 讓路等級 Lv {v.get('level')}／10（1＝最讓路，10＝最快）", str(v.get('why') or '')]
         if v.get('tk'): tip.append('TikLive：' + ('已連上（' + str(v.get('tk_ver') or '') + '）' if v.get('tk_link') else '有在跑（還沒更新到 1.0.84，用量測的）'))
-        else: tip.append('這台沒有看到 TikLive')
         if not v.get('on'): tip = ['🧠 智能調速：關掉了（點一下打開）']
         if v.get('alert'): tip.insert(0, '⚡ TikLive 斷電警報：' + str((v['alert'] or {}).get('msg') or ''))
         tip.append('點一下看詳細、改設定'); self.setToolTip('\n'.join(tip))
@@ -6366,7 +6365,7 @@ class YieldDlg(QDialog):
         rows = ''.join(f"<tr><td>{N[k]}</td><td align=right>{fm((U.get(k) or {}).get('all'))}</td>" + (f"<td align=right>{fm((U.get(k) or {}).get('tk'))}</td>" if TKC else '') +
                        f"<td align=right>{fm((U.get(k) or {}).get('vs'))}</td><td align=right>{(V.get('L') or {}).get(k, '—')}</td></tr>" for k in N)
         tk = ('✅ TikLive 已連上（' + str(V.get('tk_ver') or '') + f"）：錄影 {V.get('tk_rec') or 0} 間、轉檔 {V.get('tk_conv') or 0}、字幕 {'跑' if V.get('tk_stt') else '沒跑'}") if V.get('tk_link') else (
-            '🟡 TikLive 有在跑，但還沒更新到 TK_V1.0.84：用量測的（量得到它整串程式用多少，只是不知道它「等一下要開始做什麼」）' if V.get('tk') else '⚪ 這台沒有看到 TikLive')
+            '🟡 TikLive 有在跑，但還沒更新到 TK_V1.0.84：用量測的（量得到它整串程式用多少，只是不知道它「等一下要開始做什麼」）' if V.get('tk') else '')
         H_ = V.get('hs') or {}; P_ = H_.get('peers') or []; W_ = ['閒著', '背景小工作', '在做重工作', '使用者在等']
         M_ = {'lead': '⚡ 這邊優先', 'yield': '🤝 讓別人先跑', 'split': '⚖ 照比例分', 'alone': '⚪ 各跑各的'}
         tk += ('<br>' + '<br>'.join(f"🔗 <b>{esc_html(p.get('name') or p.get('app'))}</b> V{esc_html(p.get('ver') or '')}：{W_[int(p.get('want') or 0)]}" + (f"（{esc_html(p.get('what'))}）" if p.get('what') else '') + f"・優先 {p.get('prio', 5)}" for p in P_)
