@@ -291,6 +291,19 @@ class WebServer:
                 if MF_ is not None:
                     try: MF_.web_end(mk_)
                     except Exception: pass
+            try:                                                                    # V0.6.40 大的回應壓縮再送（手機頁 380 KB → 120 KB、清單 JSON 小 5～10 倍；同一份只壓一次）
+                if not getattr(r, 'file', None) and len(r.body) > 16384 and 'gzip' in (H.get('accept-encoding') or '') and 'Content-Encoding' not in (r.headers or {}) \
+                        and any(x in (r.ctype or '') for x in ('json', 'html', 'javascript', 'text/', 'css', 'svg')):
+                    import zlib
+                    k_ = (len(r.body), zlib.crc32(r.body)); GZ = self.__dict__.setdefault('_gz', {})
+                    z_ = GZ.get(k_)
+                    if z_ is None:
+                        zo = zlib.compressobj(1 if len(r.body) > 1000000 else 6, zlib.DEFLATED, 31); z_ = zo.compress(r.body) + zo.flush()
+                        if len(r.body) > 100000 and 'html' in (r.ctype or ''):
+                            if len(GZ) > 8: GZ.clear()
+                            GZ[k_] = z_
+                    r.body = z_; r.headers = dict(r.headers or {}); r.headers['Content-Encoding'] = 'gzip'; r.headers['Vary'] = 'Accept-Encoding'
+            except Exception: pass
             self._send(c, r, method == 'HEAD')
         except Exception: pass
         finally:
