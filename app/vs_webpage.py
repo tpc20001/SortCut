@@ -1332,25 +1332,26 @@ async function tExplore(){const tb=$('#tb');if(!tb)return;
     parts.forEach((x,i)=>{acc=i?acc+'\\'+x:x;h+=` › <a href="#" data-exp="${esc(acc)}">${esc(x)}</a>`});return h};
   tb.innerHTML=`<input id="exq" class="ssearch" placeholder="🔍 找檔案（空白分開；也可以 size:>1g ext:mkv codec:h264 dur:>30m cv:no）" value="${esc(EX.q)}" style="width:100%;margin:2px 0 4px">
    <div class="chips" id="exch" style="margin:0 0 6px">${[['size:>1g','大於 1GB'],['size:>10g','大於 10GB'],['codec:h264','H.264'],['codec:hevc','H.265'],['ext:mkv,avi,wmv,mov,ts','非 MP4'],['dur:>60m','超過 1 小時'],['cv:no','還沒轉']].map(([t,n])=>`<button class="pill${EX.q.split(/\s+/).includes(t)?' on':''}" data-ext="${t}">${n}</button>`).join('')}</div>
-   <div class="row" style="align-items:center;gap:6px;flex-wrap:wrap"><div id="excr" style="flex:1;min-width:0;word-break:break-all">${crumbs()}</div>
+   <div class="row" style="align-items:center;gap:6px;flex-wrap:wrap"><div id="excr" style="flex:1;min-width:0;word-break:break-all;font-size:15px">${crumbs()}</div><style>#excr a{color:inherit;text-decoration:none;padding:4px 6px;border-radius:8px;background:var(--btn)}#excr a:last-child{font-weight:700;color:var(--blue)}</style>
    <div class="seg" id="exs">${[['size','大小'],['n','檔數'],['save','可省'],['name','名稱']].map(([k,n])=>`<button data-k="${k}"${EX.sort===k?' class="on"':''}>${n}</button>`).join('')}</div></div>
    <div id="exb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;
   $('#exch').onclick=e=>{const b=e.target.closest('[data-ext]');if(!b)return;const t=b.dataset.ext,L=EX.q.split(/\s+/).filter(Boolean);EX.q=(L.includes(t)?L.filter(x=>x!==t):[...L,t]).join(' ');exSave();tExplore()};
   let qt=0;$('#exq').oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{EX.q=e.target.value;exSave();draw()},300)};
   $('#exs').onclick=e=>{const b=e.target.closest('button');if(!b)return;EX.sort=b.dataset.k;exSave();$$('#exs button').forEach(x=>x.classList.toggle('on',x===b));draw()};
-  $('#excr').onclick=e=>{const a=e.target.closest('[data-exp]');if(!a)return;e.preventDefault();EX.p=a.dataset.exp;EX.q='';$('#exq').value='';exSave();tExplore()};
+  $('#excr').onclick=e=>{const a=e.target.closest('[data-exp]');if(!a)return;e.preventDefault();EX.p=a.dataset.exp;EX.noAuto=!EX.p;EX.q='';$('#exq').value='';exSave();tExplore()};
   const draw=async()=>{const b=$('#exb');if(!b)return;
     if(EX.q.trim()){const j=await api(U('/api/explore',{q:EX.q,prefix:EX.p,sort:EX.sort==='name'?'name':'size',limit:300}));if(!j.ok||!$('#exb'))return;
       b.innerHTML=`<div class="mu" style="margin:6px 0">${EX.p?'在 '+esc(EX.p)+' 底下':'全部'}找到 <b>${j.n.toLocaleString()}${j.more?'+':''}</b> 個・${fmtB(j.sum)}${j.more?'（只列前 300 個，多打幾個字縮小）':''}</div><div class="panel list">`+
        (j.rows||[]).map(r=>`<div class="si" data-exf="${r.id}" style="cursor:pointer"><div style="display:flex;gap:8px"><b style="flex:1;min-width:0;word-break:break-all">${esc(r.name)}</b><b>${fmtB(r.size)}</b></div><small class="mu" style="word-break:break-all">${esc(r.folder)}・${esc((r.vcodec||'').toUpperCase())}${r.cv===3?'・✔ 轉好':''}</small></div>`).join('')+'</div>'||'<div class="empty">沒有</div>';
       b.onclick=e=>{const r=e.target.closest('[data-exf]');if(r)openFile(+r.dataset.exf)};return}
     const j=await api(U('/api/explore',{prefix:EX.p,sort:EX.sort}));if(!j.ok||!$('#exb'))return;const I=j.items||[],T=j.tot||{},H=j.here||{};
+    if(!EX.p&&I.length===1&&!EX.noAuto){EX.p=I[0].path;exSave();return tExplore()}   // V0.6.42 只有一個影片庫：直接進去（按 💽 還是回得來）
     const mx=Math.max(1,...I.map(x=>EX.sort==='n'?x.n:EX.sort==='save'?x.save:x.size));const tot=Math.max(1,T.size||0);
     const top=I.slice().sort((a,b)=>b.size-a.size).slice(0,7);const rest=Math.max(0,(T.size||0)-top.reduce((a,x)=>a+x.size,0));
     const strip=`<div style="display:flex;height:34px;border-radius:8px;overflow:hidden;gap:2px;margin:6px 0 4px">${top.map((x,i)=>`<div title="${esc(x.name)} ${fmtB(x.size)}" data-exd="${esc(x.path)}" style="flex:${x.size/tot};min-width:3px;background:${EXC[i]};cursor:pointer;display:flex;align-items:center;padding:0 4px;overflow:hidden"><small style="color:#fff;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${x.size/tot>.08?esc(x.name):''}</small></div>`).join('')}${rest>0?`<div title="其他 ${fmtB(rest)}" style="flex:${rest/tot};min-width:3px;background:#5c6168"></div>`:''}</div>
       <div class="mu" style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:6px">${top.map((x,i)=>`<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${EXC[i]}"></i> ${esc(x.name)} ${Math.round(x.size/tot*100)}%</span>`).join('')}${rest>0?`<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#5c6168"></i> 其他 ${Math.round(rest/tot*100)}%</span>`:''}</div>`;
     b.innerHTML=`<div class="panel"><div style="display:flex;gap:10px;flex-wrap:wrap"><div><small class="mu">這裡總共</small><br><b style="font-size:20px">${fmtB(T.size)}</b></div><div><small class="mu">檔案</small><br><b style="font-size:20px">${(T.n||0).toLocaleString()}</b></div><div><small class="mu">能轉的</small><br><b style="font-size:20px">${(T.conv_n||0).toLocaleString()}</b></div><div><small class="mu">轉完預估省</small><br><b style="font-size:20px;color:var(--green)">${fmtB(T.save)}</b></div></div>
-      ${I.length?strip:''}${EX.p&&T.conv_n?`<button class="pill acc" id="exconv" style="width:100%;margin-top:4px">🔁 轉檔這個資料夾（預估省 ${fmtB(T.save)}）</button>`:''}</div>
+      ${I.length>1?strip:''}${EX.p&&T.conv_n?`<button class="pill acc" id="exconv" style="width:100%;margin-top:4px">🔁 轉檔這個資料夾（預估省 ${fmtB(T.save)}）</button>`:''}</div>
       <div class="panel list">${I.map(x=>{const v=EX.sort==='n'?x.n:EX.sort==='save'?x.save:x.size;return `<div class="si" data-exd="${esc(x.path)}" data-exn="${esc(x.name)}" style="cursor:pointer;position:relative"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1;min-width:0;word-break:break-all">📁 ${esc(x.name)}</b><b>${fmtB(x.size)}</b><button class="pill" data-exm="1" style="padding:2px 10px">⋯</button></div>
         <div style="height:6px;background:var(--vline);border-radius:3px;margin:5px 0 3px;overflow:hidden;display:flex"><div style="width:${v/mx*100}%;background:#3987e5;border-radius:3px;display:flex;justify-content:flex-end"><div style="width:${x.size?Math.min(100,x.conv_b/x.size*100):0}%;background:var(--green)"></div></div></div>
         <small class="mu">${x.n.toLocaleString()} 個檔・佔 ${Math.round(x.size/tot*100)}%${x.conv_n?`・能轉 ${x.conv_n.toLocaleString()} 部，預估省 <b style="color:var(--green)">${fmtB(x.save)}</b>`:''}</small></div>`}).join('')}
@@ -1383,6 +1384,12 @@ async function tExplore(){const tb=$('#tb');if(!tb)return;
     for(let el=t&&t.nodeType===1?t:t&&t.parentElement;el;el=el.parentElement){if(el===document.documentElement){el=document.scrollingElement;if(!canY(el,dy))return}
       if(canY(el,dy)){e.preventDefault();if(sm)glide(el,dy*wm);else el.scrollTop+=dy*wm;return}if(el===document.scrollingElement)return}},{passive:false});
   ['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,()=>{AN.forEach(A=>{if(A.raf)cancelAnimationFrame(A.raf)});AN.clear()},{passive:true,capture:true}))})();
+// V0.6.42 手機：往下滑把上面那排收起來（多 20% 看得到的地方），往上滑就回來
+(function(){if(matchMedia('(pointer:fine)').matches)return;let ly=scrollY,acc=0,hid=false;const hd=()=>document.querySelector('#app > header');
+  addEventListener('scroll',()=>{const h=hd();if(!h)return;const y=scrollY,d=y-ly;ly=y;if(!h.style.transition)h.style.transition='transform .22s ease';
+    if(y<160){if(hid){h.style.transform='';hid=false}acc=0;return}acc=(d>0)===(acc>0)?acc+d:d;
+    if(acc>40&&!hid){h.style.transform='translateY(-105%)';hid=true}else if(acc<-30&&hid){h.style.transform='';hid=false}},{passive:true});
+  addEventListener('hashchange',()=>{const h=hd();if(h){h.style.transform='';hid=false}})})();
 async function tConv(){LS.set('cv',CV);
   $('#tb').innerHTML=`<div id="cvg"></div><div class="seg" id="cvtab" style="margin-bottom:8px;width:100%">${[['pick','➕ 選檔'],['run','⚙ 轉檔中'],['done','✔ 完成'],['fail','✖ 失敗']].map(([k,n])=>`<button data-k="${k}" style="flex:1"${CV.tab===k?' class="on"':''}>${n}</button>`).join('')}</div><div id="cvb"><div class="empty">讀取中…</div></div><div style="height:70px"></div>`;
   $('#cvtab').onclick=e=>{const b=e.target.closest('button');if(!b)return;CV.tab=b.dataset.k;CVSEL.clear();tConv()};

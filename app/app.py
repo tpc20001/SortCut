@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QProgressBar, QDialog, QSlider, QDoubleSpinBox, QMenu,
                                QSystemTrayIcon, QFormLayout, QGroupBox, QPlainTextEdit, QTextBrowser, QFrame, QSizePolicy, QListView, QStyledItemDelegate, QStyle, QInputDialog, QKeySequenceEdit, QTabWidget, QLayout, QStyleOptionSlider, QToolTip, QAbstractScrollArea)
 
-APP_VERSION = '0.6.41'
+APP_VERSION = '0.6.42'
 APP_TITLE = 'SortCut 影片初剪整理'
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -6557,7 +6557,7 @@ class ExplorePage(QWidget):
         ch.addStretch(1); v.addLayout(ch)
         self.q.textChanged.connect(lambda t: [c.setChecked(k in t.split()) for k, c in self.chips.items()])
         nav = QHBoxLayout(); self.b_up = QPushButton('⬆ 上一層'); self.b_up.clicked.connect(self.up); nav.addWidget(self.b_up)
-        self.crumb = QLabel(); self.crumb.setTextFormat(Qt.RichText); self.crumb.linkActivated.connect(self.go); self.crumb.setWordWrap(True); nav.addWidget(self.crumb, 1); v.addLayout(nav)
+        self.crumb = QLabel(); self.crumb.setTextFormat(Qt.RichText); self.crumb.linkActivated.connect(lambda h: (setattr(self, "_no_auto", not h), self.go(h))); self.crumb.setWordWrap(True); nav.addWidget(self.crumb, 1); v.addLayout(nav)
         kp = QHBoxLayout(); self.k = {}
         for key, nm, col in (('size', '這裡總共', '#3987e5'), ('n', '檔案', '#8994a4'), ('conv_n', '能轉的', '#e09a3e'), ('save', '轉完預估省', '#3fb37f')):
             f = QFrame(); f.setObjectName('exk'); f.setStyleSheet(f'QFrame#exk{{background:rgba(127,140,160,0.08);border:1px solid rgba(127,140,160,0.28);border-top:3px solid {col};border-radius:12px}}')
@@ -6603,14 +6603,15 @@ class ExplorePage(QWidget):
         self.refresh()
 
     def up(self):
-        j = self._j or {}; self.go(j.get('parent', '') if self.prefix else '')
+        j = self._j or {}; p_ = j.get('parent', '') if self.prefix else ''; self._no_auto = not p_; self.go(p_)
 
     def _crumbs(self):
         if not self.prefix: return '<b>💽 全部影片庫</b>'
-        parts = [x for x in self.prefix.split('\\') if x]; acc = ''; h = '<a href="">💽</a>'
+        parts = [x for x in self.prefix.split('\\') if x]; acc = ''; st = 'text-decoration:none;color:#aeb7c4'; h = f'<a href="" style="{st}">💽 全部</a>'
         for i, x in enumerate(parts):
-            acc = acc + '\\' + x if i else x; h += f' › <a href="{_html.escape(acc)}">{_html.escape(x)}</a>'
-        return h
+            acc = acc + '\\' + x if i else x; last = i == len(parts) - 1
+            h += f' <span style="color:#5d6978">›</span> <a href="{_html.escape(acc)}" style="{st}{";color:#4dc9ff;font-weight:700" if last else ""}">{_html.escape(x)}</a>'
+        return f'<span style="font-size:14px">{h}</span>'
 
     def refresh(self):
         self._seq += 1; seq = self._seq; q = self.q.text().strip(); pf = self.prefix; so = self.sort
@@ -6634,6 +6635,7 @@ class ExplorePage(QWidget):
             for c, w in ((0, 380), (1, 90), (2, 360)): self.tw.setColumnWidth(c, w)
             return
         self._j = j; I = j.get('items') or []; T = j.get('tot') or {}; H = j.get('here') or {}; tot = max(1, int(T.get('size') or 0))
+        if not self.prefix and len(I) == 1 and not getattr(self, '_no_auto', False): self.go(I[0]['path']); return     # V0.6.42 只有一個影片庫：直接進去
         self.tm.setVisible(True); self.b_conv.setVisible(bool(self.prefix) and bool(T.get('conv_n')))
         self.b_conv.setText(f"🔁 轉檔這個資料夾\n預估省 {core.fmt_b(T.get('save', 0))}")
         self.k['size'].setText(core.fmt_b(T.get('size', 0))); self.k['n'].setText(f"{int(T.get('n') or 0):,}"); self.k['conv_n'].setText(f"{int(T.get('conv_n') or 0):,}"); self.k['save'].setText(core.fmt_b(T.get('save', 0)))
